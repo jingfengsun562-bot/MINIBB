@@ -277,10 +277,12 @@ class PeerProfile(BaseModel):
     symbol: str
     name: Optional[str] = None
     market_cap: Optional[int] = None
-    pe_ratio: Optional[float] = None        # price / eps — computed if possible
+    pe_ratio: Optional[float] = None        # price / eps_diluted
+    pb_ratio: Optional[float] = None        # market_cap / total_equity
+    fcf_yield: Optional[float] = None       # free_cash_flow / market_cap
     revenue: Optional[int] = None           # from latest income statement
-    gross_margin: Optional[float] = None    # gross_profit / revenue
-    net_margin: Optional[float] = None      # net_income / revenue
+    gross_margin: Optional[float] = None    # gross_profit / revenue  (0-100 scale)
+    net_margin: Optional[float] = None      # net_income / revenue    (0-100 scale)
     operating_margin: Optional[float] = None
     ebitda: Optional[int] = None
     total_debt: Optional[int] = None
@@ -292,3 +294,47 @@ class PeerProfile(BaseModel):
 class Comparables(BaseModel):
     symbol: str
     peers: list[PeerProfile] = []
+
+
+# ─── RPT / RV ─────────────────────────────────────────────────────────────────
+
+class FinancialRatios(BaseModel):
+    """Computed ratios for one fiscal year."""
+    fiscal_year: Optional[str] = None
+    gross_margin: Optional[float] = None
+    operating_margin: Optional[float] = None
+    net_margin: Optional[float] = None
+    ebitda_margin: Optional[float] = None
+    roe: Optional[float] = None
+    roa: Optional[float] = None
+    debt_to_equity: Optional[float] = None
+    net_debt_to_ebitda: Optional[float] = None
+    current_ratio: Optional[float] = None
+    asset_turnover: Optional[float] = None
+    fcf_margin: Optional[float] = None
+
+
+class ValuationMultiples(BaseModel):
+    """Market-price-based valuation multiples (computed from live price + FA data)."""
+    current_price: Optional[float] = None
+    price_date: Optional[str] = None
+    market_cap: Optional[int] = None
+    enterprise_value: Optional[int] = None
+    pe_ratio: Optional[float] = None
+    pb_ratio: Optional[float] = None
+    ev_to_ebitda: Optional[float] = None
+    ev_to_sales: Optional[float] = None
+    fcf_yield: Optional[float] = None
+    dividend_yield: Optional[float] = None
+
+
+class EquityReport(BaseModel):
+    """Full RPT output — all layers assembled into one object."""
+    symbol: str
+    generated_at: str
+    profile: Optional[CompanyProfile] = None
+    financials: Optional[Financials] = None
+    ratios_by_year: list[FinancialRatios] = []
+    valuation: Optional[ValuationMultiples] = None
+    analyst: Optional[AnalystRatings] = None
+    comparables: Optional[Comparables] = None

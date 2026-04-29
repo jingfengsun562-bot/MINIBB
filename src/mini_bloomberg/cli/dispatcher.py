@@ -17,6 +17,7 @@ from mini_bloomberg.core.session import session
 from mini_bloomberg.core.ticker import parse_ticker
 from mini_bloomberg.render.cli_renderer import (
     console, render_anr, render_comp, render_des, render_fa, render_gp,
+    render_rpt, render_rv,
     render_error, render_loaded, render_status, ORANGE, HEADER, DIM, GREEN,
 )
 
@@ -31,14 +32,18 @@ def _registry():
     from mini_bloomberg.functions.gp   import GP
     from mini_bloomberg.functions.anr  import ANR
     from mini_bloomberg.functions.comp import COMP
-    return {"DES": DES, "FA": FA, "GP": GP, "ANR": ANR, "COMP": COMP}
+    from mini_bloomberg.functions.rpt  import RPT
+    from mini_bloomberg.functions.rv   import RV
+    return {"DES": DES, "FA": FA, "GP": GP, "ANR": ANR, "COMP": COMP, "RPT": RPT, "RV": RV}
 
 RENDERERS = {
-    "DES": render_des,
-    "FA":  render_fa,
-    "GP":  render_gp,
-    "ANR": render_anr,
+    "DES":  render_des,
+    "FA":   render_fa,
+    "GP":   render_gp,
+    "ANR":  render_anr,
     "COMP": render_comp,
+    "RPT":  render_rpt,
+    "RV":   render_rv,
 }
 
 ASSET_CLASSES = {"EQUITY", "BOND", "COMDTY", "CURNCY", "INDEX"}
@@ -208,6 +213,8 @@ def _render_help() -> None:
         ("GP <GO>",       "ASCII price chart (default 1 year)",        "GP --days 90 <GO>"),
         ("ANR <GO>",      "Analyst ratings and price targets",         "ANR <GO>"),
         ("COMP <GO>",     "Comparable companies side-by-side",         "COMP <GO>"),
+        ("RPT <GO>",      "Full equity report + Markdown file",        "RPT <GO>"),
+        ("RV <GO>",       "Relative value vs. peers",                  "RV <GO>"),
         ("? <query>",     "Ask the AI analyst a question",             "? compare NVDA AMD <GO>"),
         ("HELP <GO>",     "Show this help screen",                     "HELP <GO>"),
         ("QUIT <GO>",     "Exit Mini-Bloomberg",                       "QUIT <GO>"),

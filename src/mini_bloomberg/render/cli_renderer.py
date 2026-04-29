@@ -335,6 +335,190 @@ def render_comp(result: dict) -> None:
     console.print()
 
 
+# ─── RPT ──────────────────────────────────────────────────────────────────────
+
+def render_rpt(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]RPT ERROR:[/{RED}] {result['message']}")
+        return
+
+    from mini_bloomberg.render.markdown_renderer import render_report_markdown
+
+    d        = result["data"]
+    prof     = d.get("profile") or {}
+    fin      = d.get("financials") or {}
+    val      = d.get("valuation") or {}
+    anl      = d.get("analyst") or {}
+    rlist    = d.get("ratios_by_year") or []
+    currency = fin.get("currency") or prof.get("currency") or ""
+    income   = fin.get("income_statements") or []
+    sym      = d.get("symbol", "")
+
+    title = f"[{ORANGE}]RPT[/{ORANGE}]  [{HEADER}]{prof.get('name', sym)} — Equity Report[/{HEADER}]"
+
+    # ── Summary grid (left: profile, right: valuation) ────────────────────────
+    left = Table.grid(padding=(0, 1))
+    left.add_column(style=DIM, width=20)
+    left.add_column(style=GREEN)
+    for label, val_str in [
+        ("Sector",      prof.get("sector") or "N/A"),
+        ("Industry",    prof.get("industry") or "N/A"),
+        ("Country",     prof.get("country") or "N/A"),
+        ("Currency",    currency or "N/A"),
+        ("Employees",   f"{prof.get('employees'):,}" if prof.get("employees") else "N/A"),
+        ("Beta",        f"{prof.get('beta'):.2f}" if prof.get("beta") is not None else "N/A"),
+    ]:
+        left.add_row(label, val_str)
+
+    right = Table.grid(padding=(0, 1))
+    right.add_column(style=DIM, width=20)
+    right.add_column(style=GREEN)
+    for label, val_str in [
+        ("Mkt Cap",     _fmt_large(val.get("market_cap"), currency)),
+        ("Price",       f"{_CURRENCY_SYMBOLS.get(currency, currency+' ')}{val.get('current_price'):.2f}" if val.get("current_price") else "N/A"),
+        ("P/E",         f"{val.get('pe_ratio'):.1f}x" if val.get("pe_ratio") else "N/A"),
+        ("EV/EBITDA",   f"{val.get('ev_to_ebitda'):.1f}x" if val.get("ev_to_ebitda") else "N/A"),
+        ("FCF Yield",   f"{val.get('fcf_yield')*100:.1f}%" if val.get("fcf_yield") else "N/A"),
+        ("Div Yield",   _fmt_pct(val.get("dividend_yield"))),
+    ]:
+        right.add_row(label, val_str)
+
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column(); grid.add_column()
+    grid.add_row(left, right)
+
+    # ── Latest-year key metrics ────────────────────────────────────────────────
+    metrics = Table(border_style="dim", header_style=HEADER, show_lines=False)
+    metrics.add_column("Metric", style=DIM, width=22)
+    if income:
+        latest_yr = income[0].get("fiscal_year") or ""
+        metrics.add_column(f"Latest ({latest_yr})", justify="right", style=GREEN)
+        for label, key in [
+            ("Revenue",          "revenue"),
+            ("Gross Profit",     "gross_profit"),
+            ("EBITDA",           "ebitda"),
+            ("Net Income",       "net_income"),
+        ]:
+            metrics.add_row(label, _fmt_large(income[0].get(key), currency))
+
+        if rlist:
+            r = rlist[0]
+            for label, key, fmt in [
+                ("Gross Margin",  "gross_margin",  lambda v: _fmt_pct(v)),
+                ("Net Margin",    "net_margin",     lambda v: _fmt_pct(v)),
+                ("ROE",           "roe",            lambda v: _fmt_pct(v)),
+            ]:
+                metrics.add_row(label, fmt(r.get(key)))
+
+    # ── Analyst row ───────────────────────────────────────────────────────────
+    pt  = anl.get("price_target") or {}
+    rating_str = anl.get("consensus_rating") or "N/A"
+    target_str = f"{_CURRENCY_SYMBOLS.get(currency, '')}{pt.get('target_consensus'):.2f}" if pt.get("target_consensus") else "N/A"
+
+    console.print()
+    console.print(Panel(grid, title=title, border_style="yellow", padding=(1, 2)))
+    console.print(Panel(metrics, title=f"[{SUBHEAD}]Key Metrics[/{SUBHEAD}]", border_style="dim", padding=(1, 2)))
+
+    analyst_line = (
+        f"  [{DIM}]Consensus:[/{DIM}] [{GREEN}]{rating_str}[/{GREEN}]   "
+        f"[{DIM}]Price Target:[/{DIM}] [{GREEN}]{target_str}[/{GREEN}]   "
+        f"[{DIM}]# Analysts:[/{DIM}] [{GREEN}]{anl.get('num_analysts') or 'N/A'}[/{GREEN}]"
+    )
+    console.print(analyst_line)
+    console.print()
+
+    # ── Save Markdown ─────────────────────────────────────────────────────────
+    try:
+        out_path = render_report_markdown(result)
+        console.print(f"[{DIM}]Full report saved →[/{DIM}] [{GREEN}]{out_path}[/{GREEN}]")
+    except Exception as e:
+        console.print(f"[{RED}]Could not save Markdown report: {e}[/{RED}]")
+    console.print()
+
+
+# ─── RV ───────────────────────────────────────────────────────────────────────
+
+def render_rv(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]RV ERROR:[/{RED}] {result['message']}")
+        return
+
+    d        = result["data"]
+    sym      = d.get("symbol", "")
+    name     = d.get("name") or sym
+    currency = d.get("currency") or ""
+    val      = d.get("valuation") or {}
+    ratios   = d.get("ratios") or {}
+    peers    = d.get("peers") or []
+
+    title = f"[{ORANGE}]RV[/{ORANGE}]  [{HEADER}]{name} — Relative Value[/{HEADER}]"
+
+    t = Table(border_style="dim", header_style=HEADER, show_lines=True, expand=True)
+    t.add_column("Ticker",    style=ORANGE, min_width=7,  no_wrap=True)
+    t.add_column("Name",      style=HEADER, min_width=20, max_width=24, no_wrap=True)
+    t.add_column("P/E",       justify="right", style=GREEN, min_width=6)
+    t.add_column("EV/EBITDA", justify="right", style=GREEN, min_width=9)
+    t.add_column("EV/Sales",  justify="right", style=GREEN, min_width=8)
+    t.add_column("P/B",       justify="right", style=GREEN, min_width=6)
+    t.add_column("FCF Yld",   justify="right", style=GREEN, min_width=8)
+    t.add_column("Net Mgn",   justify="right", style=DIM,   min_width=8)
+    t.add_column("Gr Mgn",    justify="right", style=DIM,   min_width=8)
+
+    def _x(v):
+        return f"{v:.1f}x" if v is not None else "[dim]N/A[/dim]"
+    def _pp(v):
+        return f"{v*100:.1f}%" if v is not None else "[dim]N/A[/dim]"
+
+    # Primary ticker row
+    t.add_row(
+        f"[bold]{sym}[/bold]",
+        name[:22],
+        _x(val.get("pe_ratio")),
+        _x(val.get("ev_to_ebitda")),
+        _x(val.get("ev_to_sales")),
+        _x(val.get("pb_ratio")),
+        _pp(val.get("fcf_yield")),
+        _pp(ratios.get("net_margin")),
+        _pp(ratios.get("gross_margin")),
+    )
+
+    # Peer rows — compute approximate EV/EBITDA and EV/Sales from available data
+    for p in peers:
+        ev_peer = None
+        if p.get("market_cap") is not None and p.get("total_debt") is not None:
+            ev_peer = p["market_cap"] + (p["total_debt"] or 0)
+
+        ev_ebitda = None
+        if ev_peer and p.get("ebitda") and p["ebitda"] != 0:
+            ev_ebitda = ev_peer / p["ebitda"]
+
+        ev_sales = None
+        if ev_peer and p.get("revenue") and p["revenue"] != 0:
+            ev_sales = ev_peer / p["revenue"]
+
+        gross_mgn = p.get("gross_margin")
+        net_mgn   = p.get("net_margin")
+        # COMP stores margins as percentages (0-100); convert back to 0-1 for _pp
+        gross_mgn = gross_mgn / 100 if gross_mgn is not None else None
+        net_mgn   = net_mgn   / 100 if net_mgn   is not None else None
+
+        t.add_row(
+            p.get("symbol", ""),
+            (p.get("name") or "")[:22],
+            _x(p.get("pe_ratio")),
+            _x(ev_ebitda),
+            _x(ev_sales),
+            _x(p.get("pb_ratio")),
+            _pp(p.get("fcf_yield")),
+            _pp(net_mgn),
+            _pp(gross_mgn),
+        )
+
+    console.print()
+    console.print(Panel(t, title=title, border_style="yellow", padding=(1, 2)))
+    console.print()
+
+
 # ─── Error / status ───────────────────────────────────────────────────────────
 
 def render_error(message: str) -> None:

@@ -8,8 +8,10 @@ from mini_bloomberg.functions.comp import COMP
 from mini_bloomberg.functions.des  import DES
 from mini_bloomberg.functions.fa   import FA
 from mini_bloomberg.functions.gp   import GP
+from mini_bloomberg.functions.rpt  import RPT
+from mini_bloomberg.functions.rv   import RV
 
-_INSTANCES = [DES(), FA(), GP(), ANR(), COMP()]
+_INSTANCES = [DES(), FA(), GP(), ANR(), COMP(), RPT(), RV()]
 
 # List of tool spec dicts ready to pass to client.messages.create(tools=...)
 ALL_TOOLS: list[dict] = [fn.tool_schema() for fn in _INSTANCES]

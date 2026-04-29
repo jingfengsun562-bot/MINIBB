@@ -20,6 +20,20 @@ def get_financials(ticker: Ticker, years: int = 4) -> Financials:
             return _from_fmp(ticker, years)
         except DataSourceError:
             pass  # fall through to OpenBB
+    else:
+        # Non-US: try yfinance first (broader non-US coverage)
+        try:
+            result = _from_openbb(ticker, years)
+            if result.income_statements:
+                return result
+        except Exception:
+            pass
+        # yfinance had no data — try FMP (covers major HK/JP/EU stocks with suffix symbol)
+        try:
+            return _from_fmp(ticker, years)
+        except DataSourceError:
+            pass
+        raise DataSourceError(f"All fundamentals providers failed for {ticker}")
 
     try:
         return _from_openbb(ticker, years)

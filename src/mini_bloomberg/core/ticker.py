@@ -55,8 +55,15 @@ class Ticker(BaseModel):
 
     @property
     def fmp_symbol(self) -> str:
-        """FMP uses plain symbol for US; best-effort for non-US."""
-        return self.symbol
+        """FMP uses plain symbol for US and exchange-suffixed for non-US (e.g. 3693.HK, 7203.T)."""
+        if self.is_us:
+            return self.symbol
+        suffix = EXCHANGE_TO_YFINANCE.get(self.exchange_code, "")
+        sym = self.symbol
+        # Strip HKEX display leading zero (same logic as yfinance_symbol)
+        if self.exchange_code == "HK" and len(sym) == 5 and sym.startswith("0"):
+            sym = sym[1:]
+        return f"{sym}{suffix}" if suffix else sym
 
     def __str__(self) -> str:
         return f"{self.symbol} {self.exchange_code} {self.asset_class}"
