@@ -46,7 +46,12 @@ class Ticker(BaseModel):
         if self.is_us:
             return self.symbol
         suffix = EXCHANGE_TO_YFINANCE.get(self.exchange_code, "")
-        return f"{self.symbol}{suffix}" if suffix else self.symbol
+        sym = self.symbol
+        # HKEX 5-digit display codes (e.g. 09988, 03993) have a padding leading zero;
+        # yfinance uses the underlying 4-digit code (9988.HK, 3993.HK).
+        if self.exchange_code == "HK" and len(sym) == 5 and sym.startswith("0"):
+            sym = sym[1:]
+        return f"{sym}{suffix}" if suffix else sym
 
     @property
     def fmp_symbol(self) -> str:

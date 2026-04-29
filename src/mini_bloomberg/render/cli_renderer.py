@@ -164,8 +164,9 @@ def render_fa(result: dict) -> None:
     row(inc_t, "Operating Income", [s.get("operating_income") for s in income])
     row(inc_t, "EBITDA",           [s.get("ebitda") for s in income])
     row(inc_t, "Net Income",       [s.get("net_income") for s in income])
+    eps_sym = _CURRENCY_SYMBOLS.get(currency, f"{currency} " if currency else "$")
     row(inc_t, "EPS (Diluted)",    [s.get("eps_diluted") for s in income],
-        formatter=lambda v: f"${v:.2f}" if v is not None else "N/A")
+        formatter=lambda v: f"{eps_sym}{v:.2f}" if v is not None else "N/A")
     row(inc_t, "R&D",              [s.get("rd_expenses") for s in income])
 
     # Balance sheet

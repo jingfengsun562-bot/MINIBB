@@ -1,0 +1,290 @@
+{
+  "company_id": "PFE.XNYS",
+  "identifiers": {
+    "primary_ticker": "PFE",
+    "primary_exchange_mic": "XNYS",
+    "isin": "US7170811035",
+    "cusip": "717081103",
+    "lei": "765800CC2I8MQF6IB933",
+    "cik": "0000078003",
+    "figi": "BBG000BR2B91"
+  },
+  "legal_name": "Pfizer Inc.",
+  "domicile_country": "US",
+  "headquarters_country": "US",
+  "headquarters_city": "New York",
+  "website": "https://www.pfizer.com",
+  "founded_year": 1849,
+  "ipo_date": "1942-06-22",
+  "status": "Active",
+  "reporting_currency": "USD",
+  "trading_currency": "USD",
+  "fiscal_year_end_month": 12,
+  "fiscal_year_end_day": 31,
+  "accounting_standard": "US-GAAP",
+  "filing_regime": "SEC-10K-10Q",
+
+  "classification": {
+    "gics_sector": "Health Care",
+    "gics_industry_group": "Pharmaceuticals, Biotechnology & Life Sciences",
+    "gics_industry": "Pharmaceuticals",
+    "gics_sub_industry": "Pharmaceuticals",
+    "gics_code": "35201010",
+    "naics": "325412",
+    "sic": "2834",
+    "internal_sector_tag": "PHARMA"
+  },
+
+  "share_capital": {
+    "share_classes": [
+      { "class_name": "Common Stock", "voting_rights": 1, "is_listed": true, "ticker": "PFE" }
+    ],
+    "shares_outstanding_basic": 5651,
+    "shares_outstanding_diluted": 5684,
+    "as_of_date": "2023-12-31"
+  },
+
+  "periods": [
+    {
+      "period_id": "PFE.XNYS__2022FYA",
+      "period_type": "A",
+      "period_label": "FY2022A",
+      "fiscal_period_end": "2022-12-31",
+      "fiscal_period_start": "2022-01-01",
+      "fiscal_year": 2022,
+      "is_estimate": false,
+      "is_restated": false,
+
+      "reported": {
+        "NON_GAAP_ADJUSTED": {
+          "income_statement": {
+            "revenue": 100331,
+            "cost_of_revenue": 34096,
+            "gross_profit": 66235,
+            "rd_expense": 11409,
+            "sga_expense": 13049,
+            "other_operating_expense": 952,
+            "operating_income": 40825,
+            "pretax_income": 46271,
+            "income_tax_expense": 4791,
+            "effective_tax_rate": 0.1174,
+            "net_income_to_common": 37717,
+            "ebitda": 45526
+          },
+          "per_share": {
+            "eps_diluted": 6.598,
+            "weighted_avg_shares_diluted": 5772,
+            "dividend_per_share": 1.60
+          },
+          "ratios": {
+            "gross_margin": 0.660,
+            "operating_margin": 0.407,
+            "net_margin": 0.376,
+            "effective_tax_rate": 0.117
+          },
+          "operating_segments": [
+            {
+              "segment_name": "Biopharmaceuticals",
+              "revenue": 100331,
+              "operating_income": 40825,
+              "operating_margin": 0.407,
+              "industry_kpis": {
+                "product_revenue_top_drugs": [
+                  { "product": "Comirnaty",  "revenue": 37805, "yoy_growth": 3.0 },
+                  { "product": "Paxlovid",   "revenue": 18933, "yoy_growth": null },
+                  { "product": "Eliquis",    "revenue":  6479, "yoy_growth": 0.09 },
+                  { "product": "Prevnar",    "revenue":  6337, "yoy_growth": -0.01 },
+                  { "product": "Ibrance",    "revenue":  5120, "yoy_growth": -0.06 },
+                  { "product": "Vyndaqel",   "revenue":  2447, "yoy_growth": 0.36 }
+                ]
+              }
+            }
+          ],
+          "industry_kpis": {
+            "covid_franchise_split": {
+              "covid_revenue": 56738,
+              "ex_covid_revenue": 43593,
+              "covid_yoy_growth": 1.05,
+              "ex_covid_yoy_growth": 0.02
+            },
+            "rd_intensity_pct": 0.114
+          },
+          "reconciliations": [
+            { "adjustment_label": "Purchase accounting amortization", "applies_to": "OperatingIncome", "amount": { "value": -3733, "currency": "USD", "scale": "millions" } },
+            { "adjustment_label": "Acquisition-related costs",         "applies_to": "OperatingIncome", "amount": { "value":  -631, "currency": "USD", "scale": "millions" } }
+          ],
+          "provenance": {
+            "income_statement":   { "source_type": "FilingPrimary", "source_document": "Pfizer 10-K FY2022", "as_of_date": "2023-02-23", "filing_id": "0000078003-23-000020", "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000078003&type=10-K" },
+            "operating_segments": { "source_type": "FilingPrimary", "source_document": "Pfizer 10-K FY2022, Note 17", "as_of_date": "2023-02-23" },
+            "industry_kpis":      { "source_type": "PressRelease",  "source_document": "Pfizer 4Q22 Earnings Release",  "as_of_date": "2023-01-31" }
+          }
+        },
+        "US_GAAP": {
+          "income_statement": {
+            "revenue": 100330,
+            "operating_income": 35439,
+            "net_income_to_common": 31407,
+            "ebitda": 39873
+          },
+          "per_share": {
+            "eps_diluted": 5.47,
+            "weighted_avg_shares_diluted": 5772
+          },
+          "provenance": {
+            "income_statement": { "source_type": "FilingPrimary", "source_document": "Pfizer 10-K FY2022", "as_of_date": "2023-02-23" }
+          }
+        }
+      },
+
+      "consensus": {
+        "as_of_date": "2023-01-30",
+        "estimate_count": 23,
+        "revenue":      { "mean": 100100, "median": 100050, "high": 102500, "low": 98200, "n": 23 },
+        "eps_diluted":  { "mean": 6.45,   "median": 6.43,   "high": 6.55,   "low": 6.30,  "n": 23 }
+      },
+
+      "guidance_in_effect": {
+        "issued_on": "2022-11-01",
+        "source_event": "3Q22 EPS Call",
+        "items": [
+          { "metric": "Revenue",                          "low": 99500,  "high": 102000, "unit": "USD millions" },
+          { "metric": "Comirnaty Revenue",                "low": null,   "high": null,   "point_estimate": 34000, "unit": "USD millions" },
+          { "metric": "Paxlovid Revenue",                 "low": null,   "high": null,   "point_estimate": 22000, "unit": "USD millions" },
+          { "metric": "Adjusted Cost of Sales pct of Rev","low": 0.330,  "high": 0.340,  "unit": "ratio" },
+          { "metric": "Adjusted SI&A Expenses",           "low": 12800,  "high": 13300,  "unit": "USD millions" },
+          { "metric": "Adjusted R&D Expenses",            "low": 11500,  "high": 12000,  "unit": "USD millions" },
+          { "metric": "Effective Tax Rate Adjusted",      "low": null,   "high": null,   "point_estimate": 0.125,  "unit": "ratio" },
+          { "metric": "Adjusted Diluted EPS",             "low": 6.40,   "high": 6.50,   "unit": "USD per share" }
+        ]
+      }
+    },
+
+    {
+      "period_id": "PFE.XNYS__2023FYE",
+      "period_type": "A",
+      "period_label": "FY2023E",
+      "fiscal_period_end": "2023-12-31",
+      "fiscal_year": 2023,
+      "is_estimate": true,
+
+      "house_view_estimates": {
+        "NON_GAAP_ADJUSTED": {
+          "income_statement": {
+            "revenue": 68008,
+            "cost_of_revenue": 19567,
+            "rd_expense": 12664,
+            "sga_expense": 14223,
+            "operating_income": 21453,
+            "income_tax_expense": 3218,
+            "effective_tax_rate": 0.15
+          },
+          "per_share": {
+            "eps_diluted": 3.422
+          },
+          "industry_kpis": {
+            "covid_franchise_split": {
+              "covid_revenue": 21096,
+              "ex_covid_revenue": 46912
+            }
+          }
+        }
+      },
+
+      "consensus": {
+        "as_of_date": "2023-01-30",
+        "estimate_count": 21,
+        "revenue":     { "mean": 70500, "median": 70200, "high": 75000, "low": 64500, "n": 21 },
+        "eps_diluted": { "mean": 3.55,  "median": 3.50,  "high": 4.00,  "low": 3.10,  "n": 21 }
+      },
+
+      "guidance_in_effect": {
+        "issued_on": "2023-01-31",
+        "source_event": "4Q22 EPS Call",
+        "items": [
+          { "metric": "Revenue",                "low": 67000, "high": 71000, "unit": "USD millions" },
+          { "metric": "Comirnaty Revenue",      "low": null,  "high": null,  "point_estimate": 13500, "unit": "USD millions" },
+          { "metric": "Paxlovid Revenue",       "low": null,  "high": null,  "point_estimate": 8000,  "unit": "USD millions" },
+          { "metric": "Adjusted Diluted EPS",   "low": 3.25,  "high": 3.45,  "unit": "USD per share" },
+          { "metric": "Adjusted R&D Expenses",  "low": 12400, "high": 13400, "unit": "USD millions" },
+          { "metric": "Adjusted SI&A Expenses", "low": 13800, "high": 14800, "unit": "USD millions" }
+        ]
+      }
+    }
+  ],
+
+  "house_view": {
+    "broker": "UBS",
+    "analyst_name": "Colin Bristow",
+    "analyst_email": "colin.bristow@ubs.com",
+    "publication_date": "2024-01-31",
+    "rating": "Neutral",
+    "target_price": {
+      "value": 44.69,
+      "currency": "USD",
+      "horizon_months": 12,
+      "implied_upside_pct": 0.0121
+    },
+    "valuation_methodology_primary": "Hybrid",
+    "dcf": {
+      "valuation_date": "2024-01-31",
+      "currency": "USD",
+      "forecast_horizon_years": 10,
+      "terminal_growth_rate": -0.005,
+      "wacc": {
+        "risk_free_rate": 0.0353,
+        "equity_risk_premium": 0.041665,
+        "beta": 0.65,
+        "country_risk_premium": 0.0641,
+        "cost_of_equity": 0.076965,
+        "pretax_cost_of_debt": 0.032816,
+        "effective_tax_rate": 0.152496,
+        "after_tax_cost_of_debt": 0.027811,
+        "weight_equity": 0.861,
+        "weight_debt": 0.139,
+        "wacc": 0.07015
+      },
+      "forecast_periods": [
+        { "fiscal_year": 2023, "revenue": 68008,  "ebit": 21453, "tax_rate": 0.15,  "depreciation_amortization": 4507, "capex": -3400, "unlevered_fcf": 10629 },
+        { "fiscal_year": 2024, "revenue": 74159,  "ebit": 24298, "tax_rate": 0.15,  "depreciation_amortization": 4438, "capex": -3708, "unlevered_fcf": 19405 },
+        { "fiscal_year": 2025, "revenue": 72617,  "ebit": 22093, "tax_rate": 0.16,  "depreciation_amortization": 4479, "capex": -3631, "unlevered_fcf": 17706 }
+      ],
+      "enterprise_value": 205092,
+      "less_net_debt": 14829,
+      "equity_value": 230433,
+      "diluted_shares_outstanding": 5684,
+      "implied_value_per_share": 40.62
+    },
+    "multiples_valuation": {
+      "primary_multiple": {
+        "type": "P/E",
+        "base_year": 2024,
+        "base_value": 3.886,
+        "multiple": 11.5,
+        "implied_value_per_share": 44.69
+      }
+    },
+    "sotp": [
+      { "component": "COVID franchise (Paxlovid + Comirnaty)", "base_metric": "EPS",         "base_value": 1.924, "multiple_applied": 5,  "value_per_share": 9.62 },
+      { "component": "Base business (ex-COVID)",                "base_metric": "EPS",         "base_value": 1.962, "multiple_applied": 12, "value_per_share": 23.54 }
+    ],
+    "thesis_base": "We see Pfizer fairly valued at current levels with COVID franchise revenues normalizing toward $20bn run-rate by 2024, partly offset by ex-COVID growth from oncology and rare disease pipeline.",
+    "key_risks": [
+      "COVID franchise normalization steeper than expected",
+      "Patent cliff exposure 2026-2030 (Eliquis, Ibrance, Xeljanz)",
+      "Pipeline execution risk in obesity (danuglipron) and RSV"
+    ],
+    "catalysts": [
+      { "label": "Danuglipron Phase 2b obesity readout",   "expected_date": "2024-Q4-01" },
+      { "label": "RSV vaccine maternal indication PDUFA",  "expected_date": "2023-08-01" }
+    ]
+  },
+
+  "metadata": {
+    "schema_version": "1.0",
+    "record_id": "550e8400-e29b-41d4-a716-446655440000",
+    "created_at": "2024-02-01T00:00:00Z",
+    "last_updated": "2024-02-01T00:00:00Z",
+    "completeness_pct": 78,
+    "notes": "Sample built from UBS Pfizer model dated 2024-01-31. Reported FY22 figures; FY23 is estimate."
+  }
+}
