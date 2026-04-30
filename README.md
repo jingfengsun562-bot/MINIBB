@@ -6,7 +6,7 @@ A CLI terminal that mimics Bloomberg for equity analysis, powered by **OpenBB + 
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │  MINI-BLOOMBERG  Equity Analysis Terminal                                   │
 │                                                                             │
-│  Type a ticker to load it, then run DES / FA / GP / ANR / COMP.            │
+│  Type a ticker to load it, then run DES / FA / GP / ANR / COMP / RV / RPT. │
 │  Prefix with ? to ask the AI analyst. HELP <GO> for all commands.          │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 
@@ -38,6 +38,8 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 | `GP` | Graph Price | ASCII price chart via plotext |
 | `ANR` | Analyst Recommendations | Consensus target price + buy/hold/sell breakdown |
 | `COMP` | Comparables | Peer table: margins, EBITDA, debt, beta |
+| `RV` | Relative Value | Valuation multiples + margin comparison vs. peer group |
+| `RPT` | (custom) | Full investment-bank-style HTML equity report (opens in browser) |
 | `? <query>` | NLP | Claude agent with tool-use — runs functions and synthesises |
 
 **Global coverage**: US, HK, JP, FR, DE, UK and more via `SYMBOL EXCHANGE Equity` format.
@@ -55,13 +57,14 @@ cli/repl.py          ← prompt-toolkit REPL (history, tab-complete, status bar)
     ▼
 cli/dispatcher.py    ← routes: TICKER <GO> | FUNCTION <GO> | ? query <GO>
     │
-    ├── functions/   ← DES / FA / GP / ANR / COMP  (BloombergFunction ABC)
+    ├── functions/   ← DES / FA / GP / ANR / COMP / RV / RPT  (BloombergFunction ABC)
     │       │              each implements .run() and .tool_schema()
     │       ▼
     │   data/        ← provider routers → FMP (US) or OpenBB/yfinance (non-US)
     │       │              returns Pydantic models, cached 24h via diskcache
     │       ▼
     │   render/      ← cli_renderer.py (Rich panels/tables/plotext charts)
+    │               ← html_renderer.py (investment-bank-style HTML reports)
     │
     └── agents/      ← orchestrator.py: Claude tool-use loop (streaming)
             │              prompts.py: junior analyst system prompt
@@ -97,7 +100,7 @@ cp .env.example .env
 
 | Key | Where to get it | Required for |
 |---|---|---|
-| `FMP_API_KEY` | [financialmodelingprep.com](https://financialmodelingprep.com/developer/docs) (free) | FA, GP, ANR, COMP |
+| `FMP_API_KEY` | [financialmodelingprep.com](https://financialmodelingprep.com/developer/docs) (free) | FA, GP, ANR, COMP, RV, RPT |
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | `? <query>` AI agent |
 | `OPENBB_PAT` | [my.openbb.co](https://my.openbb.co/app/platform/pat) (optional) | Enhanced non-US data |
 
@@ -124,6 +127,8 @@ GP <GO>                 Price chart (default 1 year)
 GP --days 90 <GO>       Price chart (custom period)
 ANR <GO>                Analyst ratings
 COMP <GO>               Peer comparison table
+RV <GO>                 Relative value — valuation vs. peers
+RPT <GO>                Full HTML equity report → reports/<TICKER>_<DATE>.html
 ? <your question> <GO>  Ask the AI analyst
 HELP <GO>               List all commands
 QUIT <GO>               Exit
@@ -143,11 +148,13 @@ HSBA LN Equity      HSBC Holdings (London)
 ### Direct subcommands (no REPL)
 
 ```bash
-uv run mini-bb des "AAPL US Equity"
-uv run mini-bb fa  "AAPL US Equity" --years 4
-uv run mini-bb gp  "AAPL US Equity" --days 180
-uv run mini-bb anr "AAPL US Equity"
+uv run mini-bb des  "AAPL US Equity"
+uv run mini-bb fa   "AAPL US Equity" --years 4
+uv run mini-bb gp   "AAPL US Equity" --days 180
+uv run mini-bb anr  "AAPL US Equity"
 uv run mini-bb comp "AAPL US Equity"
+uv run mini-bb rv   "AAPL US Equity"
+uv run mini-bb rpt  "AAPL US Equity"
 ```
 
 ---
@@ -162,6 +169,44 @@ uv run mini-bb comp "AAPL US Equity"
 | Price targets | FMP `/stable/price-target-consensus` | — |
 | Analyst ratings | OpenBB/yfinance consensus | OpenBB/yfinance |
 | Peers | FMP `/stable/stock-peers` | — |
+
+---
+
+## RV — Relative Value
+
+`RV <GO>` prints a side-by-side table of valuation multiples and profitability margins for the loaded ticker versus its auto-detected peer group.
+
+```
+MINI-BB> NVDA US Equity <GO>
+MINI-BB> RV <GO>
+
+  Ticker   P/E     EV/EBITDA   Gross Mgn   Net Mgn   FCF Yield
+  NVDA     54.2×   42.1×       74.6%       55.0%     1.8%
+  AMD      98.4×   52.3×       47.1%       5.9%      0.4%
+  INTC     —       —           33.8%       -17.1%    —
+  ...
+```
+
+---
+
+## RPT — HTML Equity Report
+
+`RPT <GO>` generates a self-contained investment-bank-style HTML report and writes it to `reports/<TICKER>_<YYYYMMDD>.html`.
+
+**Report sections:**
+
+| # | Section | Content |
+|---|---|---|
+| 1 | Company Profile | Key identifiers, description |
+| 2 | Income Statement | Full 4-year IS with section dividers and inline margin % rows |
+| 3 | Balance Sheet | Full 4-year BS across 5 grouped sections |
+| 4 | Cash Flow | Full 4-year CF with OCF / CapEx / FCF margin rows |
+| 5 | Financial Ratios | Profitability, leverage, efficiency — 4 years |
+| 6 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
+| 7 | Analyst Consensus | Rating table + buy/hold/sell progress bars |
+| 8 | Peer Comparison | Subject ticker highlighted in peer table |
+
+Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS with Google Fonts loaded via CDN.
 
 ---
 

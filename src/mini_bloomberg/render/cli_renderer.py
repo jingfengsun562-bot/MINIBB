@@ -342,8 +342,6 @@ def render_rpt(result: dict) -> None:
         console.print(f"[{RED}]RPT ERROR:[/{RED}] {result['message']}")
         return
 
-    from mini_bloomberg.render.markdown_renderer import render_report_markdown
-
     d        = result["data"]
     prof     = d.get("profile") or {}
     fin      = d.get("financials") or {}
@@ -427,12 +425,13 @@ def render_rpt(result: dict) -> None:
     console.print(analyst_line)
     console.print()
 
-    # ── Save Markdown ─────────────────────────────────────────────────────────
+    # ── Save HTML ─────────────────────────────────────────────────────────────
     try:
-        out_path = render_report_markdown(result)
+        from mini_bloomberg.render.html_renderer import render_report_html
+        out_path = render_report_html(result)
         console.print(f"[{DIM}]Full report saved →[/{DIM}] [{GREEN}]{out_path}[/{GREEN}]")
     except Exception as e:
-        console.print(f"[{RED}]Could not save Markdown report: {e}[/{RED}]")
+        console.print(f"[{RED}]Could not save HTML report: {e}[/{RED}]")
     console.print()
 
 

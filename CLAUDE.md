@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Rules and context for Claude Code to follow while building this project. Read this before touching any code. Re-read it before each milestone.
+Rules and context for Claude Code to follow while building this project. Read this before touching any code. Re-read it before each new function.
 
 ---
 
@@ -8,9 +8,9 @@ Rules and context for Claude Code to follow while building this project. Read th
 
 A CLI terminal that mimics Bloomberg for equity analysis, powered by OpenBB + FMP for data and Claude as the natural-language orchestrator.
 
-**Primary goal**: Foundation for an LLM-powered financial analysis agent. The CLI is the UI; the real asset is a clean set of tool-callable functions that Claude can compose.
+**Primary goal**: Progressively implement Bloomberg equity functions from `Bloomberg Functions/02_Equity.md`, building toward a comprehensive equity analysis terminal. The CLI is the UI; the real asset is a clean set of tool-callable functions that Claude can compose.
 
-**Timeline**: 2 weeks. Ship a working prototype, not a perfect one.
+**Approach**: Add functions one at a time, in priority order. Each function follows the same three-layer pattern. Quality over quantity — a well-implemented function beats a broken one.
 
 ---
 
@@ -20,7 +20,7 @@ A CLI terminal that mimics Bloomberg for equity analysis, powered by OpenBB + FM
 
 ```
 data/        → Thin wrappers around OpenBB/FMP. Return Pydantic models. NO printing, NO formatting.
-functions/   → Bloomberg-style functions (DES, FA, GP, ANR, COMP). Return structured dicts. Define a tool_schema().
+functions/   → Bloomberg-style functions (DES, FA, GP, ANR, COMP, …). Return structured dicts. Define a tool_schema().
 render/      → Turn structured output into CLI tables OR JSON for the LLM. THIS is the only layer that formats.
 ```
 
@@ -44,7 +44,7 @@ This is so the same function powers both the CLI command AND the Claude agent to
 
 Reason: LLMs reason reliably about typed, schema'd data. They struggle with raw DataFrames.
 
-### 4. Cache aggressively during development
+### 4. Cache aggressively
 
 Use `diskcache` with 24h TTL on every data-layer call. OpenBB and FMP are slow and rate-limited. Caching turns 30s feedback loops into 0.1s.
 
@@ -56,19 +56,49 @@ Use `diskcache` with 24h TTL on every data-layer call. OpenBB and FMP are slow a
 
 ---
 
-## Scope Lock
+## Function Roadmap
 
-**5 functions only. Do not add more.**
+Target: all functions in `Bloomberg Functions/02_Equity.md`. Implement in priority order. Mark status as you go.
+
+### ✅ Implemented
 
 | Function | Bloomberg equivalent | What it does |
 |---|---|---|
-| `DES` | Description | Company profile: name, sector, exchange, market cap, identifiers |
+| `DES` | Security Description | Company profile: name, sector, exchange, market cap, identifiers |
 | `FA` | Financial Analysis | Income statement, balance sheet, cash flow — last 4 years annual |
 | `GP` | Graph Price | ASCII price chart, configurable lookback |
 | `ANR` | Analyst Recommendations | Consensus rating, target price, # of analysts |
-| `COMP` | Comparables | Side-by-side table of peers on key ratios |
+| `COMP` | Comparable Analysis | Side-by-side peer comparison on key ratios |
+| `RPT` | (custom) | Full HTML equity report combining all of the above |
+| `RV` | Relative Value | Valuation + margin comparison for ticker vs. peer group |
 
-If the user asks to add another function, push back: "Is this critical for the demo, or can it go in v2?"
+### 🔜 Next Priority (feasible with FMP/OpenBB free tier)
+
+| Function | Bloomberg equivalent | Notes |
+|---|---|---|
+| `DVD` | Dividend | History, yield, payout ratio, ex-dates, growth |
+| `ERN` | Earnings Analysis | EPS estimates, surprises, revision trends |
+| `EE` | Earnings Estimates | Revenue/EPS/EBITDA estimates by broker |
+| `SI` | Short Interest | Shares short, short ratio, days to cover |
+| `OWN` | Ownership Summary | Institutional holders, insider transactions |
+| `EVTS` | Events Calendar | Earnings dates, dividends, splits for a ticker |
+| `MOST` | Most Active | Top gainers, losers, volume leaders by exchange |
+
+### 🔭 Longer Term (more complex or limited data availability)
+
+| Function | Bloomberg equivalent | Notes |
+|---|---|---|
+| `EQS` | Equity Screening | Screen stocks by fundamental/technical criteria |
+| `GF` | Graph Financials | Chart any financial line item over time |
+| `WEI` | World Equity Indices | Global index monitor with performance and valuation |
+| `MA` | M&A Analysis | Deal search, premium analysis, comparable transactions |
+| `IPO` | IPO Calendar | Upcoming/recent IPOs with filing details |
+| `TECH` | Technical Analysis | Summary of technical signals and indicators |
+| `EQRV` | Equity Relative Value | Scatter plots: valuation multiples vs. fundamentals |
+
+### ⛔ Out of Scope (non-equity asset classes)
+
+Functions from `03_Fixed_Income.md`, `04_FX.md`, `05_Commodities.md`, `06_Derivatives_Options.md`, etc. — equity only for now.
 
 ---
 
@@ -97,93 +127,80 @@ python-dotenv = ">=1.0"       # .env file loading
 pytest = ">=8.0"              # testing (dev only)
 ```
 
-Use `uv` for dependency management.
+Use `uv` for dependency management. Ask before adding any new dependency.
 
 ---
 
 ## Global Market Handling
 
-User wants global coverage. Strategy to avoid data-normalization hell:
-
 1. **Ticker format**: Accept Bloomberg-style input (`AAPL US Equity`, `0700 HK Equity`, `7203 JP Equity`). Parse into `Ticker(symbol, exchange_code, asset_class)` in `core/ticker.py`.
 2. **Data source routing**:
    - US equities → FMP (best fundamentals)
-   - Non-US equities → OpenBB (broader coverage via yfinance/other providers)
+   - Non-US equities → OpenBB/yfinance first, FMP as fallback (exchange-suffix format e.g. `3693.HK`)
    - Fall back to the other if primary fails
 3. **Currency**: Never auto-convert. Display in native currency, clearly labeled.
-4. **Known pain points** (document as TODOs, don't fix in v1):
+4. **Known pain points** (document as TODOs, don't fix unless asked):
    - Chinese A-shares (would need tushare/akshare)
    - India BSE ticker mapping
    - Smaller European exchanges
 
 ---
 
-## File Layout (Build in This Order)
+## File Layout
 
 ```
 mini-bloomberg/
 ├── pyproject.toml
 ├── README.md
 ├── CLAUDE.md                   # this file
-├── WORKFLOW.md                 # data flow documentation
-├── .env.example
+├── Bloomberg Functions/        # reference specs for all Bloomberg functions
 │
 ├── src/mini_bloomberg/
-│   ├── __init__.py
 │   ├── config.py               # loads .env, exposes settings
-│   │
-│   ├── core/                   # BUILD IN MILESTONE 2
-│   │   ├── errors.py           # DataSourceError, TickerError, etc.
+│   ├── core/
+│   │   ├── errors.py
 │   │   ├── ticker.py           # "AAPL US Equity" → Ticker model
-│   │   ├── cache.py            # diskcache decorator
-│   │   └── session.py          # loaded-security state
-│   │
-│   ├── data/                   # BUILD IN MILESTONE 2-4
-│   │   ├── schemas.py          # CompanyProfile, IncomeStatement, etc.
+│   │   ├── cache.py
+│   │   └── session.py
+│   ├── data/
+│   │   ├── schemas.py          # Pydantic models for all data types
 │   │   ├── providers/
 │   │   │   ├── fmp_provider.py
 │   │   │   └── openbb_provider.py
 │   │   ├── equity_profile.py
 │   │   ├── equity_fundamentals.py
 │   │   ├── equity_price.py
-│   │   └── equity_estimates.py
-│   │
-│   ├── functions/              # BUILD IN MILESTONE 3-4
+│   │   ├── equity_estimates.py
+│   │   └── equity_peers.py
+│   ├── functions/
 │   │   ├── base.py             # BloombergFunction ABC
 │   │   ├── des.py
 │   │   ├── fa.py
 │   │   ├── gp.py
 │   │   ├── anr.py
-│   │   └── comp.py
-│   │
-│   ├── render/                 # BUILD ALONGSIDE functions/
+│   │   ├── comp.py
+│   │   └── rpt.py              # Full HTML report
+│   ├── render/
 │   │   ├── cli_renderer.py     # Rich tables, panels, plotext charts
+│   │   ├── html_renderer.py    # IB-style HTML report (RPT output)
 │   │   └── json_renderer.py    # clean JSON for LLM consumption
-│   │
-│   ├── cli/                    # BUILD IN MILESTONE 5
-│   │   ├── app.py              # Typer entry point
-│   │   ├── repl.py             # prompt-toolkit interactive loop
-│   │   └── dispatcher.py       # parse commands, route to function or agent
-│   │
-│   └── agents/                 # BUILD IN MILESTONE 6
-│       ├── tools.py            # auto-generate Anthropic tool specs
-│       ├── orchestrator.py     # single-agent tool-use loop
-│       └── prompts.py          # junior analyst system prompt
+│   ├── cli/
+│   │   ├── app.py
+│   │   ├── repl.py
+│   │   └── dispatcher.py
+│   └── agents/
+│       ├── tools.py
+│       ├── orchestrator.py
+│       └── prompts.py
 │
-├── tests/
-│   ├── fixtures/               # cached API responses for offline testing
-│   └── test_*.py
-│
+├── reports/                    # generated HTML reports
 └── scripts/
-    ├── demo_cli.sh
-    └── demo_agent.py
+    └── demo_cli.sh
 ```
 
 ---
 
 ## Bloomberg-Style UX Rules
-
-To make this feel like the real thing:
 
 - **Command syntax**: `<TICKER> <GO>` loads a security, then function commands run against it
   - `AAPL US Equity <GO>` → loads AAPL into session
@@ -195,7 +212,7 @@ To make this feel like the real thing:
 
 ---
 
-## LLM Integration Rules (Milestone 6)
+## LLM Integration Rules
 
 ### Tool schema generation pattern
 
@@ -224,40 +241,6 @@ class DES(BloombergFunction):
         # ... returns {"status": "ok", "data": profile.model_dump()}
 ```
 
-### Orchestrator loop (essence)
-
-```python
-def run_agent(query: str) -> str:
-    messages = [{"role": "user", "content": query}]
-    tools = [fn.tool_schema() for fn in ALL_FUNCTIONS]
-
-    while True:
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            system=ANALYST_PROMPT,
-            tools=tools,
-            messages=messages,
-            max_tokens=4096,
-        )
-
-        if response.stop_reason == "end_turn":
-            return extract_text(response)
-
-        # stop_reason == "tool_use"
-        tool_uses = [b for b in response.content if b.type == "tool_use"]
-        messages.append({"role": "assistant", "content": response.content})
-
-        tool_results = [
-            {
-                "type": "tool_result",
-                "tool_use_id": tu.id,
-                "content": json.dumps(FUNCTIONS_BY_NAME[tu.name].run(**tu.input)),
-            }
-            for tu in tool_uses
-        ]
-        messages.append({"role": "user", "content": tool_results})
-```
-
 ### CLI dispatch rule
 
 - `DES <GO>` → direct function call
@@ -267,29 +250,16 @@ def run_agent(query: str) -> str:
 
 ## What NOT to Do
 
-- ❌ Don't add functions beyond the 5 locked ones
+- ❌ Don't implement non-equity asset class functions (Fixed Income, FX, Commodities, etc.)
 - ❌ Don't build a web UI. CLI only.
-- ❌ Don't support options/futures/FX. Equity only.
-- ❌ Don't build a charting library. Use `plotext`.
+- ❌ Don't build a charting library. Use `plotext` for terminal charts.
 - ❌ Don't use LangChain or LlamaIndex. Raw Anthropic SDK only.
 - ❌ Don't over-engineer the cache. `diskcache` with TTL is enough.
 - ❌ Don't build multi-agent. Single agent only.
 - ❌ Don't skip Pydantic.
 - ❌ Don't print inside `data/` or `functions/`. Rendering is a separate layer.
 - ❌ Don't catch exceptions silently. Either handle them or let them bubble to a top-level handler.
-
----
-
-## Definition of Done
-
-By end of the build, this repo should:
-
-1. `uv sync && uv run mini-bb` launches the REPL
-2. `AAPL US Equity <GO>` loads the security, all 5 functions work
-3. At least 3 non-US tickers work (e.g., `0700 HK Equity`, `7203 JP Equity`, `MC FP Equity`)
-4. `? compare NVDA and AMD profitability <GO>` → agent executes multi-tool workflow, returns analyst-style answer
-5. README with screenshots, architecture diagram, demo commands
-6. Graceful error handling — no crashes on bad tickers, API failures, rate limits
+- ❌ Don't add a new dependency without asking first.
 
 ---
 
@@ -297,7 +267,6 @@ By end of the build, this repo should:
 
 - Before adding a dependency not in this file: ask the user
 - Before changing the architecture: ask the user
-- Before adding a function beyond the 5: push back
-- When stuck on a data normalization issue: document as TODO, skip, move on
-- Commit after each milestone with a clear message
+- When starting a new function: confirm which Bloomberg function from `02_Equity.md` it maps to
+- When a data field is unavailable from FMP/OpenBB free tier: document as TODO, show N/A gracefully, move on
 - If something in the rules is ambiguous, ASK rather than guess
