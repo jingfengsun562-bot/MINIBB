@@ -1,0 +1,737 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/listed_company.schema.json",
+  "title": "ListedCompany",
+  "description": "Universal schema for public listed companies in the global stock market. Supports reported financials, market consensus, and a single house analyst view. Industry-specific KPIs are stored in flexible JSON. Designed as the logical model for a Bloomberg-style fundamentals store; the physical layer materializes this into a flat (company_id, period_id, basis, metric_id) fact table.",
+  "type": "object",
+  "required": ["company_id", "identifiers", "legal_name", "classification", "reporting_currency", "fiscal_year_end_month", "accounting_standard", "periods", "metadata"],
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Internal stable ID for this entity. Convention: UPPER_PRIMARY_TICKER + '.' + EXCHANGE_MIC (e.g. PFE.XNYS, 0700.XHKG). Stable across re-listings, ticker changes, and corporate actions.",
+      "pattern": "^[A-Z0-9._-]+$"
+    },
+    "identifiers": { "$ref": "#/$defs/Identifiers" },
+    "legal_name": { "type": "string" },
+    "former_names": {
+      "type": "array",
+      "items": { "type": "object", "properties": { "name": {"type": "string"}, "until": {"type": "string", "format": "date"} } }
+    },
+    "domicile_country": { "type": "string", "description": "ISO 3166-1 alpha-2 country of incorporation", "pattern": "^[A-Z]{2}$" },
+    "headquarters_country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "headquarters_city": { "type": "string" },
+    "website": { "type": "string", "format": "uri" },
+    "founded_year": { "type": "integer" },
+    "ipo_date": { "type": "string", "format": "date" },
+    "status": { "type": "string", "enum": ["Active", "Delisted", "Acquired", "Merged", "Bankrupt"] },
+
+    "reporting_currency": { "type": "string", "description": "ISO 4217. Currency of financial statements.", "pattern": "^[A-Z]{3}$" },
+    "trading_currency": { "type": "string", "description": "ISO 4217. May differ from reporting_currency (e.g. ADRs).", "pattern": "^[A-Z]{3}$" },
+    "fiscal_year_end_month": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Month in which fiscal year ends. 12=Dec (US/EU typical), 3=Mar (Japan), 6=Jun (Australia)." },
+    "fiscal_year_end_day": { "type": "integer", "minimum": 1, "maximum": 31 },
+    "accounting_standard": {
+      "type": "string",
+      "enum": ["US-GAAP", "IFRS", "J-GAAP", "PRC-GAAP", "HKFRS", "IND-AS", "K-IFRS", "AAS", "OTHER"]
+    },
+    "filing_regime": {
+      "type": "string",
+      "description": "Primary disclosure regime.",
+      "enum": ["SEC-10K-10Q", "SEC-20F", "SEC-40F", "HK-Annual-Interim", "PRC-A-Share", "EU-Annual-Half", "JP-YukashokenHokokusho", "UK-Annual-Interim", "SG-Annual", "OTHER"]
+    },
+
+    "classification": { "$ref": "#/$defs/Classification" },
+    "share_capital": { "$ref": "#/$defs/ShareCapital" },
+    "ownership": { "$ref": "#/$defs/Ownership" },
+    "esg": { "$ref": "#/$defs/ESGSnapshot" },
+
+    "periods": {
+      "type": "array",
+      "description": "Time series of fiscal periods. Each period bundles reported, consensus, and house view together for that fiscal interval.",
+      "items": { "$ref": "#/$defs/Period" }
+    },
+
+    "house_view": { "$ref": "#/$defs/HouseView" },
+
+    "debt_schedule": {
+      "type": "array",
+      "description": "Per-instrument debt schedule (bonds, notes, term loans, revolvers). Optional. Snapshot at most_recent_as_of_date.",
+      "items": { "$ref": "#/$defs/DebtInstrument" }
+    },
+
+    "metadata": { "$ref": "#/$defs/Metadata" }
+  },
+
+  "$defs": {
+
+    "Money": {
+      "type": "object",
+      "required": ["value", "currency"],
+      "properties": {
+        "value": { "type": "number" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "scale": { "type": "string", "enum": ["unit", "thousands", "millions", "billions"], "default": "unit" }
+      }
+    },
+
+    "Identifiers": {
+      "type": "object",
+      "description": "All known identifiers for cross-reference. At minimum primary_ticker + primary_exchange_mic must be set.",
+      "required": ["primary_ticker", "primary_exchange_mic"],
+      "properties": {
+        "primary_ticker": { "type": "string", "description": "Local trading symbol on primary exchange (e.g. PFE, 0700, 7203)." },
+        "primary_exchange_mic": { "type": "string", "description": "ISO 10383 MIC (e.g. XNYS, XNAS, XHKG, XSHG, XTKS, XLON).", "pattern": "^[A-Z0-9]{4}$" },
+        "isin": { "type": "string", "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$" },
+        "cusip": { "type": "string", "pattern": "^[A-Z0-9]{9}$" },
+        "sedol": { "type": "string", "pattern": "^[A-Z0-9]{7}$" },
+        "lei": { "type": "string", "pattern": "^[A-Z0-9]{20}$", "description": "Legal Entity Identifier." },
+        "cik": { "type": "string", "description": "SEC Central Index Key (US filers)." },
+        "figi": { "type": "string", "pattern": "^BBG[A-Z0-9]{9}$", "description": "Bloomberg Global ID (open)." },
+        "permid": { "type": "string", "description": "Refinitiv PermID." },
+        "ric": { "type": "string", "description": "Reuters Instrument Code." },
+        "duns": { "type": "string" },
+        "other_listings": {
+          "type": "array",
+          "description": "Secondary listings, ADRs, GDRs, dual listings, H-shares, A-shares, etc.",
+          "items": {
+            "type": "object",
+            "required": ["ticker", "exchange_mic", "listing_type"],
+            "properties": {
+              "ticker": { "type": "string" },
+              "exchange_mic": { "type": "string", "pattern": "^[A-Z0-9]{4}$" },
+              "listing_type": { "type": "string", "enum": ["Ordinary", "ADR", "GDR", "H-Share", "A-Share", "B-Share", "DualPrimary", "Secondary", "Preferred"] },
+              "ratio_to_ordinary": { "type": "number", "description": "e.g. 1 ADR = 4 ordinary shares -> 4." },
+              "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+            }
+          }
+        }
+      }
+    },
+
+    "Classification": {
+      "type": "object",
+      "description": "Industry classification across multiple taxonomies.",
+      "properties": {
+        "gics_sector": { "type": "string" },
+        "gics_industry_group": { "type": "string" },
+        "gics_industry": { "type": "string" },
+        "gics_sub_industry": { "type": "string" },
+        "gics_code": { "type": "string", "description": "8-digit GICS code." },
+        "icb_industry": { "type": "string" },
+        "icb_supersector": { "type": "string" },
+        "icb_sector": { "type": "string" },
+        "icb_subsector": { "type": "string" },
+        "icb_code": { "type": "string" },
+        "naics": { "type": "string" },
+        "sic": { "type": "string" },
+        "internal_sector_tag": {
+          "type": "string",
+          "description": "Tag used to look up which industry_kpis schema applies. Examples: PHARMA, BANK_IB, BANK_COMMERCIAL, INSURANCE_PC, INSURANCE_LIFE, REIT, ENERGY_EP, UTILITY, RETAIL, SEMI, SOFTWARE, TELECOM, AIRLINE, ASSET_MANAGER, AUTO, MINING."
+        }
+      }
+    },
+
+    "ShareCapital": {
+      "type": "object",
+      "properties": {
+        "share_classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["class_name", "voting_rights"],
+            "properties": {
+              "class_name": { "type": "string", "description": "e.g. 'Class A Common', 'Ordinary'." },
+              "voting_rights": { "type": "number", "description": "Votes per share." },
+              "is_listed": { "type": "boolean" },
+              "ticker": { "type": "string" },
+              "shares_outstanding": { "type": "number" }
+            }
+          }
+        },
+        "shares_outstanding_basic": { "type": "number" },
+        "shares_outstanding_diluted": { "type": "number" },
+        "treasury_shares": { "type": "number" },
+        "free_float_shares": { "type": "number" },
+        "free_float_pct": { "type": "number" },
+        "buyback_authorization": {
+          "type": "object",
+          "properties": {
+            "amount_authorized": { "$ref": "#/$defs/Money" },
+            "amount_remaining": { "$ref": "#/$defs/Money" },
+            "expiry_date": { "type": ["string", "null"], "format": "date" }
+          }
+        },
+        "as_of_date": { "type": "string", "format": "date" }
+      }
+    },
+
+    "Ownership": {
+      "type": "object",
+      "properties": {
+        "institutional_ownership_pct": { "type": "number" },
+        "insider_ownership_pct": { "type": "number" },
+        "strategic_ownership_pct": { "type": "number", "description": "Government, founders, parent-co stakes." },
+        "top_holders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["holder_name", "pct_outstanding"],
+            "properties": {
+              "holder_name": { "type": "string" },
+              "holder_type": { "type": "string", "enum": ["Institutional", "Insider", "Government", "Founder", "Family", "Strategic", "Other"] },
+              "pct_outstanding": { "type": "number" },
+              "shares_held": { "type": "number" },
+              "as_of_date": { "type": "string", "format": "date" }
+            }
+          }
+        },
+        "as_of_date": { "type": "string", "format": "date" }
+      }
+    },
+
+    "ESGSnapshot": {
+      "type": "object",
+      "description": "Latest reported sustainability metrics. Time series can be added as separate periods if needed.",
+      "properties": {
+        "as_of_fiscal_year": { "type": "integer" },
+        "scope_1_emissions_tco2e": { "type": "number" },
+        "scope_2_emissions_tco2e": { "type": "number" },
+        "scope_3_emissions_tco2e": { "type": "number" },
+        "energy_consumption_mwh": { "type": "number" },
+        "water_withdrawal_m3": { "type": "number" },
+        "waste_generated_tons": { "type": "number" },
+        "board_independent_pct": { "type": "number" },
+        "board_female_pct": { "type": "number" },
+        "workforce_female_pct": { "type": "number" },
+        "employee_turnover_pct": { "type": "number" },
+        "lost_time_incident_rate": { "type": "number" },
+        "net_zero_target_year": { "type": "integer" },
+        "third_party_ratings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string", "description": "MSCI, Sustainalytics, S&P, ISS, CDP, etc." },
+              "rating": { "type": "string" },
+              "score": { "type": "number" },
+              "as_of_date": { "type": "string", "format": "date" }
+            }
+          }
+        }
+      }
+    },
+
+    "Period": {
+      "type": "object",
+      "description": "A single fiscal interval with reported / consensus / house view aligned to it.",
+      "required": ["period_id", "period_type", "period_label", "fiscal_period_end"],
+      "properties": {
+        "period_id": { "type": "string", "description": "Globally unique. Convention: {company_id}__{period_label}. e.g. PFE.XNYS__2024Q1A" },
+        "period_type": { "type": "string", "enum": ["Q", "S", "A", "TTM", "YTD", "STUB"] },
+        "period_label": { "type": "string", "description": "Human-readable label, e.g. '1Q24A', '2025E', 'FY2023A', 'TTM 2024Q3'." },
+        "fiscal_period_end": { "type": "string", "format": "date" },
+        "fiscal_period_start": { "type": "string", "format": "date" },
+        "fiscal_year": { "type": "integer" },
+        "is_estimate": { "type": "boolean", "default": false, "description": "True if any view in this period is forward-looking estimate." },
+        "is_restated": { "type": "boolean", "default": false },
+        "restated_from_period_id": { "type": ["string", "null"] },
+
+        "reported": { "$ref": "#/$defs/MultibasisFinancials", "description": "As filed by the company, across all reporting bases." },
+        "consensus": { "$ref": "#/$defs/ConsensusBlock", "description": "Aggregated street consensus snapshot for this period." },
+        "house_view_estimates": { "$ref": "#/$defs/MultibasisFinancials", "description": "Single house view forecast for this period (if estimate). Reported is null/absent for forward periods." },
+
+        "guidance_in_effect": { "$ref": "#/$defs/GuidanceBlock", "description": "Management guidance applicable to this period as last issued." }
+      }
+    },
+
+    "MultibasisFinancials": {
+      "type": "object",
+      "description": "Holds the same financial data under one or more reporting bases (GAAP, non-GAAP, IFRS). At least one basis must be present.",
+      "minProperties": 1,
+      "patternProperties": {
+        "^(US_GAAP|NON_GAAP_ADJUSTED|IFRS|J_GAAP|PRC_GAAP|HKFRS|IND_AS|K_IFRS|AAS|OTHER)$": {
+          "$ref": "#/$defs/BasisFinancials"
+        }
+      }
+    },
+
+    "BasisFinancials": {
+      "type": "object",
+      "properties": {
+        "income_statement": { "$ref": "#/$defs/IncomeStatement" },
+        "balance_sheet": { "$ref": "#/$defs/BalanceSheet" },
+        "cash_flow": { "$ref": "#/$defs/CashFlowStatement" },
+        "per_share": { "$ref": "#/$defs/PerShareMetrics" },
+        "ratios": { "$ref": "#/$defs/FinancialRatios" },
+        "operating_segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OperatingSegment" }
+        },
+        "geographic_breakdown": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GeographicBreakdown" }
+        },
+        "industry_kpis": {
+          "type": "object",
+          "description": "Sector-specific KPIs as flexible JSON. Convention: keys follow snake_case. Look up internal_sector_tag in classification to know the expected shape. See README for current sector key conventions.",
+          "additionalProperties": true
+        },
+        "reconciliations": {
+          "type": "array",
+          "description": "GAAP <-> non-GAAP bridge items if this basis is non-GAAP.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "adjustment_label": { "type": "string" },
+              "amount": { "$ref": "#/$defs/Money" },
+              "tax_effect": { "$ref": "#/$defs/Money" },
+              "applies_to": { "type": "string", "enum": ["Revenue", "COGS", "OpEx", "OperatingIncome", "PreTaxIncome", "Tax", "NetIncome", "EPS"] }
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "description": "Medium-grain lineage. One entry per major statement block.",
+          "properties": {
+            "income_statement": { "$ref": "#/$defs/Provenance" },
+            "balance_sheet": { "$ref": "#/$defs/Provenance" },
+            "cash_flow": { "$ref": "#/$defs/Provenance" },
+            "operating_segments": { "$ref": "#/$defs/Provenance" },
+            "industry_kpis": { "$ref": "#/$defs/Provenance" }
+          }
+        }
+      }
+    },
+
+    "IncomeStatement": {
+      "type": "object",
+      "properties": {
+        "revenue": { "type": "number" },
+        "cost_of_revenue": { "type": "number" },
+        "gross_profit": { "type": "number" },
+        "rd_expense": { "type": "number" },
+        "sga_expense": { "type": "number" },
+        "selling_marketing_expense": { "type": "number" },
+        "general_admin_expense": { "type": "number" },
+        "amortization_intangibles": { "type": "number" },
+        "restructuring_expense": { "type": "number" },
+        "other_operating_expense": { "type": "number" },
+        "total_operating_expenses": { "type": "number" },
+        "operating_income": { "type": "number" },
+        "interest_income": { "type": "number" },
+        "interest_expense": { "type": "number" },
+        "other_non_operating_income": { "type": "number" },
+        "pretax_income": { "type": "number" },
+        "income_tax_expense": { "type": "number" },
+        "effective_tax_rate": { "type": "number" },
+        "net_income_from_continuing_ops": { "type": "number" },
+        "income_from_discontinued_ops": { "type": "number" },
+        "net_income_before_minority": { "type": "number" },
+        "minority_interest": { "type": "number" },
+        "net_income_to_common": { "type": "number" },
+        "preferred_dividends": { "type": "number" },
+        "ebitda": { "type": "number" },
+        "stock_based_compensation": { "type": "number" }
+      }
+    },
+
+    "BalanceSheet": {
+      "type": "object",
+      "properties": {
+        "cash_and_equivalents": { "type": "number" },
+        "short_term_investments": { "type": "number" },
+        "trade_receivables": { "type": "number" },
+        "inventories": { "type": "number" },
+        "other_current_assets": { "type": "number" },
+        "total_current_assets": { "type": "number" },
+        "long_term_investments": { "type": "number" },
+        "ppe_gross": { "type": "number" },
+        "accumulated_depreciation": { "type": "number" },
+        "ppe_net": { "type": "number" },
+        "goodwill": { "type": "number" },
+        "intangible_assets_net": { "type": "number" },
+        "operating_lease_rou_assets": { "type": "number" },
+        "deferred_tax_assets": { "type": "number" },
+        "other_long_term_assets": { "type": "number" },
+        "total_assets": { "type": "number" },
+        "accounts_payable": { "type": "number" },
+        "accrued_liabilities": { "type": "number" },
+        "short_term_debt": { "type": "number" },
+        "current_portion_long_term_debt": { "type": "number" },
+        "deferred_revenue_current": { "type": "number" },
+        "income_tax_payable": { "type": "number" },
+        "other_current_liabilities": { "type": "number" },
+        "total_current_liabilities": { "type": "number" },
+        "long_term_debt": { "type": "number" },
+        "operating_lease_liabilities_lt": { "type": "number" },
+        "deferred_tax_liabilities": { "type": "number" },
+        "pension_postretirement_obligations": { "type": "number" },
+        "other_long_term_liabilities": { "type": "number" },
+        "total_liabilities": { "type": "number" },
+        "preferred_stock": { "type": "number" },
+        "common_stock_apic": { "type": "number" },
+        "treasury_stock": { "type": "number" },
+        "retained_earnings": { "type": "number" },
+        "accumulated_oci": { "type": "number" },
+        "non_controlling_interest": { "type": "number" },
+        "total_equity": { "type": "number" }
+      }
+    },
+
+    "CashFlowStatement": {
+      "type": "object",
+      "properties": {
+        "net_income": { "type": "number" },
+        "depreciation_amortization": { "type": "number" },
+        "stock_based_compensation": { "type": "number" },
+        "deferred_taxes": { "type": "number" },
+        "change_in_working_capital": { "type": "number" },
+        "change_in_receivables": { "type": "number" },
+        "change_in_inventories": { "type": "number" },
+        "change_in_payables": { "type": "number" },
+        "other_operating_activities": { "type": "number" },
+        "cash_flow_from_operations": { "type": "number" },
+        "capital_expenditures": { "type": "number" },
+        "acquisitions_net": { "type": "number" },
+        "divestitures": { "type": "number" },
+        "investments_purchased": { "type": "number" },
+        "investments_sold": { "type": "number" },
+        "other_investing_activities": { "type": "number" },
+        "cash_flow_from_investing": { "type": "number" },
+        "debt_issued": { "type": "number" },
+        "debt_repaid": { "type": "number" },
+        "common_stock_issued": { "type": "number" },
+        "common_stock_repurchased": { "type": "number" },
+        "dividends_paid": { "type": "number" },
+        "other_financing_activities": { "type": "number" },
+        "cash_flow_from_financing": { "type": "number" },
+        "fx_effect_on_cash": { "type": "number" },
+        "net_change_in_cash": { "type": "number" },
+        "free_cash_flow": { "type": "number", "description": "Standard: CFO - Capex." },
+        "free_cash_flow_to_equity": { "type": "number" }
+      }
+    },
+
+    "PerShareMetrics": {
+      "type": "object",
+      "properties": {
+        "eps_basic": { "type": "number" },
+        "eps_diluted": { "type": "number" },
+        "eps_diluted_continuing_ops": { "type": "number" },
+        "weighted_avg_shares_basic": { "type": "number" },
+        "weighted_avg_shares_diluted": { "type": "number" },
+        "book_value_per_share": { "type": "number" },
+        "tangible_book_value_per_share": { "type": "number" },
+        "cash_per_share": { "type": "number" },
+        "fcf_per_share": { "type": "number" },
+        "dividend_per_share": { "type": "number" },
+        "dividend_payout_ratio": { "type": "number" },
+        "buyback_yield": { "type": "number" }
+      }
+    },
+
+    "FinancialRatios": {
+      "type": "object",
+      "properties": {
+        "gross_margin": { "type": "number" },
+        "operating_margin": { "type": "number" },
+        "ebitda_margin": { "type": "number" },
+        "net_margin": { "type": "number" },
+        "return_on_equity": { "type": "number" },
+        "return_on_assets": { "type": "number" },
+        "return_on_invested_capital": { "type": "number" },
+        "return_on_tangible_equity": { "type": "number" },
+        "asset_turnover": { "type": "number" },
+        "debt_to_equity": { "type": "number" },
+        "debt_to_capital": { "type": "number" },
+        "net_debt_to_ebitda": { "type": "number" },
+        "interest_coverage": { "type": "number" },
+        "current_ratio": { "type": "number" },
+        "quick_ratio": { "type": "number" },
+        "days_sales_outstanding": { "type": "number" },
+        "days_inventory_outstanding": { "type": "number" },
+        "days_payable_outstanding": { "type": "number" },
+        "cash_conversion_cycle": { "type": "number" }
+      }
+    },
+
+    "OperatingSegment": {
+      "type": "object",
+      "required": ["segment_name", "revenue"],
+      "properties": {
+        "segment_name": { "type": "string", "description": "As reported by company. e.g. 'CCG', 'Pharmaceuticals', 'Investment Banking'." },
+        "segment_id": { "type": "string", "description": "Stable internal ID across reporting changes." },
+        "parent_segment_id": { "type": ["string", "null"], "description": "If hierarchical." },
+        "revenue": { "type": "number" },
+        "operating_income": { "type": "number" },
+        "operating_margin": { "type": "number" },
+        "depreciation_amortization": { "type": "number" },
+        "capital_expenditures": { "type": "number" },
+        "assets": { "type": "number" },
+        "headcount": { "type": "number" },
+        "industry_kpis": {
+          "type": "object",
+          "description": "Segment-level industry-specific drill-down. Free-form per sector. Examples: Pharma {product_revenue: [{name, revenue}]}; Semi {units_thousands, asp, tam, market_share}; Bank-IB {qoq_change, yoy_change, pct_of_net_revenues}.",
+          "additionalProperties": true
+        }
+      }
+    },
+
+    "GeographicBreakdown": {
+      "type": "object",
+      "required": ["region", "revenue"],
+      "properties": {
+        "region": { "type": "string", "description": "As reported. e.g. 'United States', 'Greater China', 'EMEA', 'Asia-Pacific ex-Japan'." },
+        "region_iso": { "type": "string", "description": "ISO country code if region is a single country.", "pattern": "^[A-Z]{2}$" },
+        "revenue": { "type": "number" },
+        "pct_of_total_revenue": { "type": "number" },
+        "long_lived_assets": { "type": "number" },
+        "headcount": { "type": "number" }
+      }
+    },
+
+    "ConsensusBlock": {
+      "type": "object",
+      "description": "Street consensus snapshot. Carries main aggregates and contributor count.",
+      "properties": {
+        "as_of_date": { "type": "string", "format": "date" },
+        "estimate_count": { "type": "integer" },
+        "revenue": { "type": "object", "$ref": "#/$defs/StatDistribution" },
+        "ebitda": { "$ref": "#/$defs/StatDistribution" },
+        "operating_income": { "$ref": "#/$defs/StatDistribution" },
+        "net_income": { "$ref": "#/$defs/StatDistribution" },
+        "eps_basic": { "$ref": "#/$defs/StatDistribution" },
+        "eps_diluted": { "$ref": "#/$defs/StatDistribution" },
+        "free_cash_flow": { "$ref": "#/$defs/StatDistribution" },
+        "dividend_per_share": { "$ref": "#/$defs/StatDistribution" },
+        "target_price": { "$ref": "#/$defs/StatDistribution" }
+      }
+    },
+
+    "StatDistribution": {
+      "type": "object",
+      "properties": {
+        "mean": { "type": "number" },
+        "median": { "type": "number" },
+        "high": { "type": "number" },
+        "low": { "type": "number" },
+        "stdev": { "type": "number" },
+        "n": { "type": "integer" }
+      }
+    },
+
+    "GuidanceBlock": {
+      "type": "object",
+      "description": "Management's published forward outlook applicable to this period.",
+      "properties": {
+        "issued_on": { "type": "string", "format": "date" },
+        "source_event": { "type": "string", "description": "e.g. '4Q22 EPS Call', 'Investor Day Dec 2022', '8-K filed 2023-02-01'." },
+        "previous_guidance_id": { "type": ["string", "null"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["metric", "low", "high"],
+            "properties": {
+              "metric": { "type": "string", "description": "e.g. 'Revenue', 'Adjusted Diluted EPS', 'Adjusted COGS pct of revenue', 'Capex'." },
+              "low": { "type": ["number", "null"] },
+              "high": { "type": ["number", "null"] },
+              "point_estimate": { "type": ["number", "null"] },
+              "unit": { "type": "string", "description": "e.g. 'USD millions', 'USD per share', 'pct of revenue'." },
+              "qualifier": { "type": "string", "description": "e.g. 'excluding FX', 'organic', 'constant currency'." }
+            }
+          }
+        }
+      }
+    },
+
+    "HouseView": {
+      "type": "object",
+      "description": "Single house analyst view (rating, target price, valuation models, thesis).",
+      "properties": {
+        "broker": { "type": "string", "description": "e.g. 'UBS', 'Goldman Sachs Research'." },
+        "analyst_name": { "type": "string" },
+        "analyst_email": { "type": "string", "format": "email" },
+        "publication_date": { "type": "string", "format": "date" },
+        "rating": { "type": "string", "enum": ["Buy", "Overweight", "Outperform", "Hold", "Neutral", "Marketperform", "Sell", "Underweight", "Underperform", "NotRated", "Suspended"] },
+        "target_price": {
+          "type": "object",
+          "properties": {
+            "value": { "type": "number" },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "horizon_months": { "type": "integer" },
+            "implied_upside_pct": { "type": "number" }
+          }
+        },
+        "valuation_methodology_primary": { "type": "string", "enum": ["DCF", "Multiples", "SOTP", "DDM", "EVA", "AssetBased", "Hybrid"] },
+        "dcf": { "$ref": "#/$defs/DCFModel" },
+        "multiples_valuation": { "$ref": "#/$defs/MultiplesValuation" },
+        "sotp": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "component": { "type": "string", "description": "Segment or business name." },
+              "base_metric": { "type": "string", "description": "EPS, EBITDA, Revenue, BookValue, etc." },
+              "base_value": { "type": "number" },
+              "multiple_applied": { "type": "number" },
+              "value_per_share": { "type": "number" }
+            }
+          }
+        },
+        "thesis_bull": { "type": "string" },
+        "thesis_base": { "type": "string" },
+        "thesis_bear": { "type": "string" },
+        "key_risks": { "type": "array", "items": { "type": "string" } },
+        "catalysts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "expected_date": { "type": "string", "format": "date" }
+            }
+          }
+        }
+      }
+    },
+
+    "DCFModel": {
+      "type": "object",
+      "properties": {
+        "valuation_date": { "type": "string", "format": "date" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "forecast_horizon_years": { "type": "integer" },
+        "terminal_growth_rate": { "type": "number" },
+        "wacc": { "$ref": "#/$defs/WACC" },
+        "forecast_periods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fiscal_year": { "type": "integer" },
+              "revenue": { "type": "number" },
+              "cost_of_sales": { "type": "number" },
+              "rd": { "type": "number" },
+              "sga": { "type": "number" },
+              "ebit": { "type": "number" },
+              "tax": { "type": "number" },
+              "tax_rate": { "type": "number" },
+              "depreciation_amortization": { "type": "number" },
+              "stock_based_comp": { "type": "number" },
+              "change_in_wc": { "type": "number" },
+              "capex": { "type": "number" },
+              "unlevered_fcf": { "type": "number" },
+              "discount_factor": { "type": "number" },
+              "pv_unlevered_fcf": { "type": "number" }
+            }
+          }
+        },
+        "pv_explicit_period": { "type": "number" },
+        "pv_terminal_value": { "type": "number" },
+        "enterprise_value": { "type": "number" },
+        "less_net_debt": { "type": "number" },
+        "less_minority_interest": { "type": "number" },
+        "plus_investments": { "type": "number" },
+        "equity_value": { "type": "number" },
+        "diluted_shares_outstanding": { "type": "number" },
+        "implied_value_per_share": { "type": "number" }
+      }
+    },
+
+    "WACC": {
+      "type": "object",
+      "properties": {
+        "risk_free_rate": { "type": "number" },
+        "equity_risk_premium": { "type": "number" },
+        "beta": { "type": "number" },
+        "country_risk_premium": { "type": "number" },
+        "size_premium": { "type": "number" },
+        "cost_of_equity": { "type": "number" },
+        "pretax_cost_of_debt": { "type": "number" },
+        "effective_tax_rate": { "type": "number" },
+        "after_tax_cost_of_debt": { "type": "number" },
+        "weight_equity": { "type": "number" },
+        "weight_debt": { "type": "number" },
+        "wacc": { "type": "number" }
+      }
+    },
+
+    "MultiplesValuation": {
+      "type": "object",
+      "properties": {
+        "primary_multiple": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["P/E", "EV/EBITDA", "EV/Sales", "P/B", "P/FCF", "P/AUM", "P/TBV", "EV/Subscriber", "EV/Reserve"] },
+            "base_year": { "type": "integer" },
+            "base_value": { "type": "number" },
+            "multiple": { "type": "number" },
+            "implied_value_per_share": { "type": "number" }
+          }
+        },
+        "peer_multiples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "peer_company_id": { "type": "string" },
+              "multiple_type": { "type": "string" },
+              "value": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+
+    "DebtInstrument": {
+      "type": "object",
+      "required": ["instrument_name", "principal_outstanding"],
+      "properties": {
+        "instrument_name": { "type": "string", "description": "e.g. '4.10% Senior Notes due 2023'." },
+        "instrument_type": { "type": "string", "enum": ["SeniorUnsecuredNote", "SeniorSecuredNote", "SubordinatedNote", "ConvertibleNote", "TermLoan", "RevolvingCredit", "CommercialPaper", "GreenBond", "Other"] },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "principal_issued": { "type": "number" },
+        "principal_outstanding": { "type": "number" },
+        "coupon_rate": { "type": "number" },
+        "coupon_type": { "type": "string", "enum": ["Fixed", "Floating", "Zero", "Step", "PIK"] },
+        "floating_rate_reference": { "type": "string", "description": "e.g. '3M LIBOR + 0.35%', 'SOFR + 1.00%'." },
+        "issue_date": { "type": "string", "format": "date" },
+        "maturity_date": { "type": "string", "format": "date" },
+        "is_callable": { "type": "boolean" },
+        "next_call_date": { "type": "string", "format": "date" },
+        "is_current_portion": { "type": "boolean", "description": "True if any portion matures within 12 months." },
+        "interest_expense_period": { "type": "number" }
+      }
+    },
+
+    "Provenance": {
+      "type": "object",
+      "description": "Medium-grain source attribution applied to one statement block (IS / BS / CF / segments / industry_kpis).",
+      "required": ["source_type", "as_of_date"],
+      "properties": {
+        "source_type": { "type": "string", "enum": ["FilingPrimary", "FilingAmendment", "PressRelease", "EarningsCall", "InvestorPresentation", "BrokerNote", "DataVendor", "ManualEntry", "LLMExtraction"] },
+        "source_document": { "type": "string", "description": "e.g. '10-K FY2023', '20-F 2023', 'Form 6-K filed 2024-04-15', 'UBS Pfizer Note 2024-02-15'." },
+        "source_url": { "type": "string", "format": "uri" },
+        "filing_id": { "type": "string", "description": "e.g. SEC accession number." },
+        "as_of_date": { "type": "string", "format": "date", "description": "When the underlying data was published or stated as of." },
+        "ingested_at": { "type": "string", "format": "date-time", "description": "When this record was loaded into the store." },
+        "ingested_by": { "type": "string", "description": "Pipeline/agent identifier." },
+        "data_vendor": { "type": "string", "description": "If sourced via FactSet, S&P Capital IQ, Refinitiv, etc." }
+      }
+    },
+
+    "Metadata": {
+      "type": "object",
+      "required": ["schema_version", "last_updated"],
+      "properties": {
+        "schema_version": { "type": "string" },
+        "record_id": { "type": "string", "description": "UUID of this company record." },
+        "created_at": { "type": "string", "format": "date-time" },
+        "last_updated": { "type": "string", "format": "date-time" },
+        "data_quality_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "completeness_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoftBank Corp. (9434) — Equity Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: #e8ecf2;
+    color: #1a1a2e;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 980px;
+    margin: 32px auto;
+    background: #fff;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.15);
+  }
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, #0a1628 0%, #16305a 100%);
+    border-bottom: 3px solid #c9a227;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 36px 14px;
+    border-bottom: 1px solid rgba(201,162,39,0.25);
+  }
+  .firm-name {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #c9a227;
+  }
+  .report-type {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.45);
+    text-align: right;
+    line-height: 1.8;
+  }
+  .header-main { padding: 22px 36px 26px; }
+  .company-name {
+    font-family: 'Merriweather', Georgia, serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+  }
+  .ticker-badge {
+    display: inline-block;
+    background: #c9a227;
+    color: #0a1628;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px 2px;
+    border-radius: 2px;
+    margin-left: 12px;
+    letter-spacing: 0.8px;
+    vertical-align: middle;
+    position: relative;
+    top: -3px;
+  }
+  .subtitle {
+    color: rgba(255,255,255,0.5);
+    font-size: 11.5px;
+    margin-top: 5px;
+  }
+  .rating-strip {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .rating-pill {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 18px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+  .stat-item { color: rgba(255,255,255,0.85); }
+  .stat-item .lbl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: rgba(255,255,255,0.4);
+    display: block;
+  }
+  .stat-item .val { font-size: 16px; font-weight: 600; }
+  .stat-item .val.gold { color: #c9a227; }
+  .stat-item .val.pos  { color: #6ee7a0; }
+  .stat-item .val.neg  { color: #fca5a5; }
+  /* ── KPI BAR ── */
+  .kpi-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-bottom: 2px solid #16305a;
+  }
+  .kpi {
+    padding: 13px 14px;
+    text-align: center;
+    border-right: 1px solid #dde2ee;
+    background: #f5f7fc;
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi-label {
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8492a6;
+  }
+  .kpi-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0a1628;
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos { color: #176a3e; }
+  .neg { color: #b91c1c; }
+  /* ── BODY ── */
+  .body { padding: 30px 36px 36px; }
+  .section { margin-bottom: 30px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 13px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #16305a;
+  }
+  .section-num {
+    width: 24px; height: 24px;
+    background: #16305a;
+    color: #c9a227;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #16305a;
+  }
+  .section-title .sub {
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #8492a6;
+    margin-left: 6px;
+  }
+  /* ── TABLES ── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    background: #16305a;
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 9px 12px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; }
+  thead th:not(:first-child) { font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+  tbody tr:nth-child(even) { background: #f7f9fd; }
+  tbody tr:hover { background: #edf1fa; }
+  tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8ecf4;
+    color: #374151;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody td:first-child {
+    text-align: left;
+    font-weight: 500;
+    color: #111827;
+  }
+  .row-accent td { background: #eff3fc !important; font-weight: 600; }
+  .peer-self td { background: #fefce8 !important; font-weight: 600; }
+  .peer-self td:first-child { border-left: 3px solid #c9a227; }
+  /* ── STATEMENT SECTION DIVIDERS ── */
+  .row-section td {
+    background: #E0E0E0 !important;
+    color: #98FB98;
+    font-weight: 700;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 7px 12px;
+    border: none;
+  }
+  .row-section:hover td { background: #E0E0E0 !important; }
+  .row-section td:first-child { border-left: none; }
+  /* ── INLINE % ROWS ── */
+  .row-pct td {
+    background: #f0f2f8 !important;
+    color: #6b7280;
+    font-size: 11px;
+    font-style: italic;
+    padding: 3px 12px 3px 28px;
+    border-bottom: none;
+  }
+  .row-pct:hover td { background: #e8ecf4 !important; }
+  .row-pct td:first-child { color: #6b7280; font-weight: 400; text-align: left; padding-left: 28px; }
+  /* ── PROFILE TWO-COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1.4fr; gap: 20px; }
+  .profile-table tbody td { text-align: left; }
+  .profile-table tbody td:first-child {
+    color: #6b7280;
+    font-weight: 400;
+    width: 40%;
+  }
+  .desc-box {
+    background: #f8fafd;
+    border-left: 4px solid #c9a227;
+    border-radius: 0 4px 4px 0;
+    padding: 14px 16px;
+    font-size: 12px;
+    color: #4b5563;
+    line-height: 1.75;
+  }
+  /* ── VALUATION CARDS ── */
+  .val-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .val-card {
+    background: #f5f7fc;
+    border: 1px solid #dde2ee;
+    border-radius: 4px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .val-card .lbl {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8492a6;
+    font-weight: 600;
+  }
+  .val-card .val {
+    font-size: 19px;
+    font-weight: 700;
+    color: #0a1628;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* ── ANALYST CONSENSUS ── */
+  .consensus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .bar-row { margin-bottom: 10px; }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin-bottom: 4px;
+    color: #374151;
+  }
+  .bar-track { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-fill.buy  { background: #176a3e; }
+  .bar-fill.hold { background: #d97706; }
+  .bar-fill.sell { background: #b91c1c; }
+  /* ── FOOTER ── */
+  .footer {
+    background: #0a1628;
+    padding: 12px 36px 14px;
+    border-top: 2px solid #c9a227;
+  }
+  .footer-disclaimer {
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.3);
+    line-height: 1.6;
+  }
+  .footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(201,162,39,0.2);
+    font-size: 10px;
+    color: rgba(255,255,255,0.35);
+  }
+  .footer-bar .pgnum { color: #c9a227; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-top">
+    <div class="firm-name">Mini BB Research</div>
+    <div class="report-type">Equity Research &nbsp;·&nbsp; Communication Services<br>2026-04-30 &nbsp;·&nbsp; Full Report</div>
+  </div>
+  <div class="header-main">
+    <div>
+      <span class="company-name">SoftBank Corp.</span>
+      <span class="ticker-badge">9434</span>
+    </div>
+    <div class="subtitle">Communication Services &nbsp;·&nbsp; JPX &nbsp;·&nbsp; JPY</div>
+    <div class="rating-strip">
+      <span class="rating-pill" style="background:#176a3e;border:1px solid #176a3e">Buy</span>
+      
+      <div class="stat-item"><span class="lbl">Current Price</span><span class="val">¥221.90</span></div>
+      
+    </div>
+  </div>
+</header>
+
+<!-- KPI BAR -->
+<div class="kpi-bar">
+  <div class="kpi"><div class="kpi-label">Market Cap</div><div class="kpi-value">¥10.60T</div></div>
+  <div class="kpi"><div class="kpi-label">P / E</div><div class="kpi-value">20.5×</div></div>
+  <div class="kpi"><div class="kpi-label">EV / EBITDA</div><div class="kpi-value">8.7×</div></div>
+  <div class="kpi"><div class="kpi-label">FCF Yield</div><div class="kpi-value pos">5.9%</div></div>
+  <div class="kpi"><div class="kpi-label">Div. Yield</div><div class="kpi-value">3.92%</div></div>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- §1 Company Profile -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">1</div><div class="section-title">Company Profile</div></div>
+    <div class="two-col">
+      <table class="profile-table"><tbody>
+        <tr><td>Sector</td><td>Communication Services</td></tr>
+        <tr><td>Industry</td><td>Telecom Services</td></tr>
+        <tr><td>Country</td><td>Japan</td></tr>
+        <tr><td>Exchange</td><td>JPX</td></tr>
+        <tr><td>Currency</td><td>JPY</td></tr>
+        <tr><td>Employees</td><td>55,070</td></tr>
+        <tr><td>Shares Outstanding</td><td>47.8B</td></tr>
+        <tr><td>Float</td><td>28.4B</td></tr>
+        <tr><td>Beta</td><td>0.04</td></tr>
+        <tr><td>Dividend Yield</td><td>3.92%</td></tr>
+        <tr><td>Website</td><td>https://www.softbank.jp</td></tr>
+      </tbody></table>
+      <div class="desc-box">SoftBank Corp., together with its subsidiaries, provides mobile communications and fixed-line telecommunications and ISP services in Japan. It operates through five segments: Consumer, Enterprise, Distribution, Media &amp; EC, and Financial. The Consumer segment offers mobile services; sells mobile devices; provides internet broadband services under the SoftBank Hikari brand; sells and rents related equipment for broadband services; trades in and supplies electric power; and offers electric power trading agency services. The Enterprise segment provides mobile lines and mobile device rental; mobile…</div>
+    </div>
+  </div>
+
+  <!-- §2 Income Statement -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">2</div><div class="section-title">Income Statement<span class="sub">JPY</span></div></div>
+    <table><thead><tr><th></th><th>2025</th><th>2024</th><th>2023</th><th>2022</th></tr></thead><tbody><tr class="row-section"><td colspan="5">Revenue</td></tr><tr><td>Total Revenue</td><td>¥6.54T</td><td>¥6.08T</td><td>¥5.91T</td><td>¥5.69T</td></tr><tr><td>Cost of Revenue</td><td>¥3.38T</td><td>¥3.15T</td><td>¥3.19T</td><td>¥2.89T</td></tr><tr class="row-section"><td colspan="5">Gross Profit</td></tr><tr><td>Gross Profit</td><td>¥3.16T</td><td>¥2.93T</td><td>¥2.72T</td><td>¥2.80T</td></tr><tr class="row-pct"><td>  Gross Margin %</td><td>48.3%</td><td>48.2%</td><td>46.0%</td><td>49.2%</td></tr><tr class="row-section"><td colspan="5">Operating Expenses</td></tr><tr><td>R&D Expenses</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr><tr><td>SG&A Expenses</td><td>¥2.20T</td><td>¥2.08T</td><td>¥1.96T</td><td>¥1.86T</td></tr><tr><td>Total Operating Expenses</td><td>¥2.17T</td><td>¥2.06T</td><td>¥1.66T</td><td>¥1.84T</td></tr><tr class="row-section"><td colspan="5">Operating Income</td></tr><tr class="row-accent"><td>Operating Income</td><td>¥989.0B</td><td>¥876.1B</td><td>¥1.06T</td><td>¥965.6B</td></tr><tr class="row-pct"><td>  Operating Margin %</td><td>15.1%</td><td>14.4%</td><td>17.9%</td><td>17.0%</td></tr><tr><td>EBIT</td><td>¥997.4B</td><td>¥867.3B</td><td>¥980.1B</td><td>¥924.5B</td></tr><tr class="row-accent"><td>EBITDA</td><td>¥1.75T</td><td>¥1.61T</td><td>¥1.74T</td><td>¥1.67T</td></tr><tr class="row-pct"><td>  EBITDA Margin %</td><td>26.7%</td><td>26.5%</td><td>29.5%</td><td>29.3%</td></tr><tr class="row-section"><td colspan="5">Below the Line</td></tr><tr><td>D&A</td><td>¥748.0B</td><td>¥743.8B</td><td>¥764.2B</td><td>¥745.3B</td></tr><tr><td>Interest Expense</td><td>¥117.4B</td><td>¥61.4B</td><td>¥117.2B</td><td>¥66.4B</td></tr><tr><td>Income Tax Expense</td><td>¥224.8B</td><td>¥215.6B</td><td>¥208.7B</td><td>¥282.6B</td></tr><tr class="row-section"><td colspan="5">Net Income &amp; EPS</td></tr><tr class="row-accent"><td>Net Income</td><td>¥526.1B</td><td>¥489.1B</td><td>¥531.4B</td><td>¥517.1B</td></tr><tr class="row-pct"><td>  Net Margin %</td><td>8.0%</td><td>8.0%</td><td>9.0%</td><td>9.1%</td></tr><tr><td>EPS (Basic)</td><td>¥10.99</td><td>¥10.32</td><td>¥11.25</td><td>¥11.00</td></tr><tr><td>EPS (Diluted)</td><td>¥10.84</td><td>¥10.12</td><td>¥11.10</td><td>¥10.82</td></tr><tr><td>Wtd Avg Shares</td><td>47.9B</td><td>47.4B</td><td>47.2B</td><td>47.5B</td></tr><tr><td>Wtd Avg Shares (Dil.)</td><td>48.5B</td><td>48.3B</td><td>47.6B</td><td>47.8B</td></tr></tbody></table>
+  </div>
+
+  <!-- §3 Balance Sheet -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">3</div><div class="section-title">Balance Sheet<span class="sub">JPY</span></div></div>
+    <table><thead><tr><th></th><th>2025</th><th>2024</th><th>2023</th><th>2022</th></tr></thead><tbody><tr class="row-section"><td colspan="5">Current Assets</td></tr><tr><td>Cash & Equivalents</td><td>¥1.44T</td><td>¥1.99T</td><td>¥2.06T</td><td>¥1.55T</td></tr><tr><td>Short-term Investments</td><td>¥260.2B</td><td>¥229.7B</td><td>¥194.9B</td><td>¥194.0B</td></tr><tr><td>Net Receivables</td><td>¥2.81T</td><td>¥2.66T</td><td>¥2.39T</td><td>¥2.13T</td></tr><tr><td>Inventory</td><td>¥191.5B</td><td>¥155.1B</td><td>¥159.1B</td><td>¥136.2B</td></tr><tr class="row-accent"><td>Total Current Assets</td><td>¥4.86T</td><td>¥5.27T</td><td>¥4.95T</td><td>¥4.13T</td></tr><tr class="row-section"><td colspan="5">Non-Current Assets</td></tr><tr><td>Goodwill</td><td>¥2.07T</td><td>¥2.05T</td><td>¥1.99T</td><td>¥1.42T</td></tr><tr><td>Total Non-Current Assets</td><td>¥11.24T</td><td>¥10.25T</td><td>¥9.73T</td><td>¥8.97T</td></tr><tr class="row-accent"><td>Total Assets</td><td>¥16.10T</td><td>¥15.52T</td><td>¥14.68T</td><td>¥13.10T</td></tr><tr class="row-section"><td colspan="5">Current Liabilities</td></tr><tr><td>Accounts Payable</td><td>¥2.83T</td><td>¥2.54T</td><td>¥2.32T</td><td>¥1.46T</td></tr><tr><td>Short-term Debt</td><td>¥1.65T</td><td>¥2.38T</td><td>¥2.06T</td><td>¥2.04T</td></tr><tr class="row-accent"><td>Total Current Liabilities</td><td>¥6.84T</td><td>¥7.09T</td><td>¥6.37T</td><td>¥5.34T</td></tr><tr class="row-section"><td colspan="5">Non-Current Liabilities</td></tr><tr><td>Long-term Debt</td><td>¥4.32T</td><td>¥3.94T</td><td>¥4.07T</td><td>¥3.96T</td></tr><tr><td>Total Non-Current Liab.</td><td>¥5.00T</td><td>¥4.50T</td><td>¥4.63T</td><td>¥4.54T</td></tr><tr class="row-accent"><td>Total Liabilities</td><td>¥11.84T</td><td>¥11.59T</td><td>¥11.00T</td><td>¥9.88T</td></tr><tr class="row-section"><td colspan="5">Equity</td></tr><tr><td>Retained Earnings</td><td>¥1.59T</td><td>¥1.48T</td><td>¥1.39T</td><td>¥1.13T</td></tr><tr><td>Total Stockholders' Eq.</td><td>¥2.74T</td><td>¥2.38T</td><td>¥2.22T</td><td>¥1.96T</td></tr><tr class="row-accent"><td>Total Equity</td><td>¥4.27T</td><td>¥3.94T</td><td>¥3.68T</td><td>¥3.21T</td></tr><tr><td>Total Debt</td><td>¥5.96T</td><td>¥6.32T</td><td>¥6.13T</td><td>¥6.00T</td></tr><tr class="row-accent"><td>Net Debt</td><td>¥4.53T</td><td>¥4.33T</td><td>¥4.08T</td><td>¥4.45T</td></tr></tbody></table>
+  </div>
+
+  <!-- §4 Cash Flow -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">4</div><div class="section-title">Cash Flow<span class="sub">JPY</span></div></div>
+    <table><thead><tr><th></th><th>2025</th><th>2024</th><th>2023</th><th>2022</th></tr></thead><tbody><tr class="row-section"><td colspan="5">Operating Activities</td></tr><tr><td>Net Income</td><td>¥655.3B</td><td>¥590.3B</td><td>¥654.1B</td><td>¥575.4B</td></tr><tr><td>D&A</td><td>¥748.0B</td><td>¥743.8B</td><td>¥764.2B</td><td>¥745.3B</td></tr><tr><td>Stock-Based Comp.</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr><tr><td>Change in Working Cap.</td><td>−¥117.1B</td><td>¥5.9B</td><td>−¥29.9B</td><td>¥18.2B</td></tr><tr class="row-accent"><td>Operating Cash Flow</td><td>¥1.37T</td><td>¥1.24T</td><td>¥1.16T</td><td>¥1.22T</td></tr><tr class="row-pct"><td>  OCF Margin %</td><td>20.9%</td><td>20.4%</td><td>19.5%</td><td>21.4%</td></tr><tr class="row-section"><td colspan="5">Investing Activities</td></tr><tr><td>Capital Expenditure</td><td>−¥746.7B</td><td>−¥554.1B</td><td>−¥609.2B</td><td>−¥709.1B</td></tr><tr class="row-pct"><td>  CapEx % of Revenue</td><td>-11.4%</td><td>-9.1%</td><td>-10.3%</td><td>-12.5%</td></tr><tr><td>Net Investing Activities</td><td>−¥995.2B</td><td>−¥927.6B</td><td>−¥154.8B</td><td>−¥957.7B</td></tr><tr class="row-section"><td colspan="5">Financing Activities</td></tr><tr><td>Dividends Paid</td><td>−¥408.8B</td><td>−¥406.8B</td><td>−¥405.6B</td><td>−¥403.6B</td></tr><tr><td>Stock Repurchased</td><td>−¥22.3B</td><td>−¥100.0B</td><td>N/A</td><td>−¥1.3B</td></tr><tr><td>Net Financing Activities</td><td>−¥956.4B</td><td>−¥357.1B</td><td>−¥495.3B</td><td>−¥305.1B</td></tr><tr class="row-section"><td colspan="5">Free Cash Flow</td></tr><tr class="row-accent"><td>Free Cash Flow</td><td>¥621.2B</td><td>¥685.6B</td><td>¥546.5B</td><td>¥506.8B</td></tr><tr class="row-pct"><td>  FCF Margin %</td><td>9.5%</td><td>11.3%</td><td>9.2%</td><td>8.9%</td></tr><tr><td>Net Change in Cash</td><td>−¥550.7B</td><td>−¥78.0B</td><td>¥505.7B</td><td>−¥46.8B</td></tr></tbody></table>
+  </div>
+
+  <!-- §5 Financial Ratios -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">5</div><div class="section-title">Financial Ratios</div></div>
+    <table><thead><tr><th>Ratio</th><th>2025</th><th>2024</th><th>2023</th><th>2022</th></tr></thead><tbody><tr><td>Gross Margin</td><td>48.3%</td><td>48.2%</td><td>46.0%</td><td>49.2%</td></tr><tr><td>Operating Margin</td><td>15.1%</td><td>14.4%</td><td>17.9%</td><td>17.0%</td></tr><tr><td>Net Margin</td><td>8.0%</td><td>8.0%</td><td>9.0%</td><td>9.1%</td></tr><tr><td>EBITDA Margin</td><td>26.7%</td><td>26.5%</td><td>29.5%</td><td>29.3%</td></tr><tr><td>ROE</td><td>12.3%</td><td>12.4%</td><td>14.4%</td><td>16.1%</td></tr><tr><td>ROA</td><td>3.3%</td><td>3.2%</td><td>3.6%</td><td>3.9%</td></tr><tr><td>Debt / Equity</td><td>1.4×</td><td>1.6×</td><td>1.7×</td><td>1.9×</td></tr><tr><td>Net Debt / EBITDA</td><td>2.6×</td><td>2.7×</td><td>2.3×</td><td>2.7×</td></tr><tr><td>Current Ratio</td><td>0.7×</td><td>0.7×</td><td>0.8×</td><td>0.8×</td></tr><tr><td>Asset Turnover</td><td>0.4×</td><td>0.4×</td><td>0.4×</td><td>0.4×</td></tr><tr class="row-accent"><td>FCF Margin</td><td>9.5%</td><td>11.3%</td><td>9.2%</td><td>8.9%</td></tr></tbody></table>
+  </div>
+
+  <!-- §6 Valuation Multiples -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">6</div><div class="section-title">Valuation Multiples<span class="sub">As of 2026-04-30</span></div></div>
+    <div class="val-grid"><div class="val-card"><div class="lbl">Current Price</div><div class="val">¥221.90</div></div><div class="val-card"><div class="lbl">Market Cap</div><div class="val">¥10.60T</div></div><div class="val-card"><div class="lbl">Enterprise Value</div><div class="val">¥15.13T</div></div><div class="val-card"><div class="lbl">P / E</div><div class="val">20.5×</div></div><div class="val-card"><div class="lbl">P / B</div><div class="val">2.5×</div></div><div class="val-card"><div class="lbl">EV / EBITDA</div><div class="val">8.7×</div></div><div class="val-card"><div class="lbl">EV / Sales</div><div class="val">2.3×</div></div><div class="val-card"><div class="lbl">FCF Yield</div><div class="val pos">5.9%</div></div></div>
+  </div>
+
+  <!-- §7 Analyst Consensus -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">7</div><div class="section-title">Analyst Consensus</div></div>
+    <div class="consensus-grid">
+      <table><tbody><tr><td>Consensus Rating</td><td style="text-align:right;color:#176a3e;font-weight:700">Buy</td></tr><tr><td># Analysts</td><td style="text-align:right">14</td></tr><tr><td>Price Target (Consensus)</td><td style="text-align:right">N/A</td></tr><tr><td>Price Target High</td><td style="text-align:right">N/A</td></tr><tr><td>Price Target Low</td><td style="text-align:right">N/A</td></tr></tbody></table>
+      <div><p style='color:#8492a6;font-size:12px'>No breakdown available.</p></div>
+    </div>
+  </div>
+
+  <!-- §8 Peer Comparison -->
+  <div class="section">
+    <div class="section-header"><div class="section-num">8</div><div class="section-title">Peer Comparison</div></div>
+    <table><thead><tr><th>Ticker</th><th>Company</th><th>Mkt Cap</th><th>P / E</th><th>EV/EBITDA</th><th>Gross Mgn</th><th>Net Mgn</th><th>FCF Yld</th></tr></thead><tbody><tr class="peer-self"><td>9434</td><td>SoftBank Corp.</td><td>¥10.60T</td><td>20.5×</td><td>8.7×</td><td>48.3%</td><td>8.0%</td><td>9.5%</td></tr><tr><td>3774.T</td><td>Internet Initiative Japa</td><td>$491.5B</td><td>24.7×</td><td>8.5×</td><td>21.6%</td><td>6.3%</td><td>1.7%</td></tr><tr><td>3842.T</td><td>Nextgen,Inc.</td><td>$3.0B</td><td>14.6×</td><td>6.9×</td><td>39.2%</td><td>5.7%</td><td>19.5%</td></tr><tr><td>4415.T</td><td>Broad Enterprise Co.,Ltd</td><td>$7.7B</td><td>N/A</td><td>15.5×</td><td>40.0%</td><td>5.6%</td><td>-34.0%</td></tr><tr><td>9416.T</td><td>Vision Inc.</td><td>$53.8B</td><td>11.9×</td><td>7.5×</td><td>55.6%</td><td>11.6%</td><td>3.1%</td></tr><tr><td>9419.T</td><td>WirelessGate, Inc.</td><td>$3.1B</td><td>N/A</td><td>18.5×</td><td>53.1%</td><td>3.4%</td><td>5.2%</td></tr><tr><td>9428.T</td><td>Crops Corporation</td><td>$12.6B</td><td>12.7×</td><td>5.3×</td><td>24.7%</td><td>1.6%</td><td>9.9%</td></tr><tr><td>9432.T</td><td>NTT, Inc.</td><td>$12.46T</td><td>12.8×</td><td>6.8×</td><td>77.4%</td><td>7.3%</td><td>1.9%</td></tr><tr><td>9433.T</td><td>KDDI Corporation</td><td>$9.83T</td><td>16.0×</td><td>8.0×</td><td>42.7%</td><td>11.2%</td><td>5.8%</td></tr></tbody></table>
+  </div>
+
+</div><!-- /body -->
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-disclaimer">
+    This report is generated by Mini-Bloomberg for informational and educational purposes only.
+    It does not constitute investment advice or a solicitation to buy or sell any security.
+    Data sourced from Financial Modeling Prep (FMP) and OpenBB / yfinance.
+    Accuracy of financial data is not guaranteed. Past performance is not indicative of future results.
+  </div>
+  <div class="footer-bar">
+    <span>Mini BB Research &nbsp;·&nbsp; 2026-04-30</span>
+    <span class="pgnum">Page 1 of 1</span>
+  </div>
+</footer>
+
+</div><!-- /page -->
+</body>
+</html>
