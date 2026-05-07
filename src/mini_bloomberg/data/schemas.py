@@ -338,3 +338,82 @@ class EquityReport(BaseModel):
     valuation: Optional[ValuationMultiples] = None
     analyst: Optional[AnalystRatings] = None
     comparables: Optional[Comparables] = None
+
+
+# ─── FX ───────────────────────────────────────────────────────────────────────
+
+class FXRate(BaseModel):
+    """Spot rate for a single currency pair."""
+    pair: str                          # e.g. "EURUSD"
+    base: str                          # e.g. "EUR"
+    quote: str                         # e.g. "USD"
+    rate: Optional[float] = None       # quote units per 1 base unit
+    change_pct: Optional[float] = None # 1-day % change
+    high_52w: Optional[float] = None
+    low_52w: Optional[float] = None
+    date: Optional[str] = None
+
+
+class FXBoard(BaseModel):
+    """Multi-currency monitor — FXIP output."""
+    as_of: str
+    rates: list[FXRate] = []
+
+
+class FXConversion(BaseModel):
+    """FXCA output — result of converting an amount between two currencies."""
+    from_currency: str
+    to_currency: str
+    amount: float
+    rate: float
+    converted: float
+    as_of: Optional[str] = None
+
+
+class FXVolatility(BaseModel):
+    """Historical vol for a currency pair over various windows — FXHV output."""
+    pair: str
+    as_of: Optional[str] = None
+    vol_10d: Optional[float] = None    # annualised HV, 0-100 scale
+    vol_20d: Optional[float] = None
+    vol_30d: Optional[float] = None
+    vol_60d: Optional[float] = None
+    vol_90d: Optional[float] = None
+    vol_180d: Optional[float] = None
+    vol_1y: Optional[float] = None
+    bars: list[PriceBar] = []          # raw OHLCV so renderer can chart
+
+
+class FXForwardPoint(BaseModel):
+    """One tenor row for FRD output."""
+    tenor: str                         # "O/N", "1W", "1M", …
+    days: int
+    forward_rate: Optional[float] = None
+    forward_points: Optional[float] = None  # forward_rate - spot (in pips)
+    implied_yield_diff: Optional[float] = None  # annualised %, from CIP
+
+
+class FXForwardCurve(BaseModel):
+    """FRD output — forward curve for one currency pair."""
+    pair: str
+    spot: Optional[float] = None
+    as_of: Optional[str] = None
+    tenors: list[FXForwardPoint] = []
+
+
+class FXRankRow(BaseModel):
+    """One row in the WCR currency performance table."""
+    currency: str
+    pair_vs_usd: str                   # e.g. "EURUSD=X"
+    spot: Optional[float] = None
+    change_1d: Optional[float] = None
+    change_1w: Optional[float] = None
+    change_1m: Optional[float] = None
+    change_3m: Optional[float] = None
+    change_ytd: Optional[float] = None
+
+
+class FXRanking(BaseModel):
+    """WCR output — ranked currencies by performance."""
+    as_of: str
+    rows: list[FXRankRow] = []

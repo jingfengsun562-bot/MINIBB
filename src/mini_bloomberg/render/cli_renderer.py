@@ -530,3 +530,236 @@ def render_status(message: str) -> None:
 
 def render_loaded(ticker_str: str) -> None:
     console.print(f"[{ORANGE}]Security loaded:[/{ORANGE}] [{GREEN}]{ticker_str}[/{GREEN}]")
+
+
+# ─── FX: FXIP ─────────────────────────────────────────────────────────────────
+
+def render_fxip(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]FXIP ERROR:[/{RED}] {result['message']}")
+        return
+
+    d     = result["data"]
+    group = result.get("group", "g10").upper()
+    quote = result.get("quote", "USD")
+    rates = d.get("rates", [])
+    as_of = d.get("as_of", "")
+
+    title = (
+        f"[{ORANGE}]FXIP[/{ORANGE}]  "
+        f"[{HEADER}]FX Monitor — {group} vs {quote}[/{HEADER}]  "
+        f"[{DIM}]{as_of}[/{DIM}]"
+    )
+
+    t = Table(border_style="dim", header_style=HEADER, show_lines=False, expand=True)
+    t.add_column("Pair",      style=ORANGE,  min_width=8,  no_wrap=True)
+    t.add_column("Spot",      justify="right", style=GREEN,  min_width=12)
+    t.add_column("Chg %",     justify="right", min_width=8)
+    t.add_column("52W High",  justify="right", style=DIM,    min_width=12)
+    t.add_column("52W Low",   justify="right", style=DIM,    min_width=12)
+
+    def _spot(v):
+        return f"{v:.4f}" if v is not None else "N/A"
+
+    def _chg(v):
+        if v is None:
+            return "N/A"
+        colour = GREEN if v >= 0 else RED
+        arrow  = "▲" if v >= 0 else "▼"
+        return f"[{colour}]{arrow} {abs(v):.2f}%[/{colour}]"
+
+    for r in rates:
+        t.add_row(
+            r.get("pair", ""),
+            _spot(r.get("rate")),
+            _chg(r.get("change_pct")),
+            _spot(r.get("high_52w")),
+            _spot(r.get("low_52w")),
+        )
+
+    console.print()
+    console.print(Panel(t, title=title, border_style="yellow", padding=(1, 2)))
+    console.print()
+
+
+# ─── FX: FXCA ─────────────────────────────────────────────────────────────────
+
+def render_fxca(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]FXCA ERROR:[/{RED}] {result['message']}")
+        return
+
+    d = result["data"]
+    from_ccy  = d.get("from_currency", "")
+    to_ccy    = d.get("to_currency", "")
+    amount    = d.get("amount", 0)
+    rate      = d.get("rate")
+    converted = d.get("converted")
+    as_of     = d.get("as_of", "")
+
+    title = (
+        f"[{ORANGE}]FXCA[/{ORANGE}]  "
+        f"[{HEADER}]FX Calculator — {from_ccy} → {to_ccy}[/{HEADER}]  "
+        f"[{DIM}]{as_of}[/{DIM}]"
+    )
+
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style=DIM, min_width=20)
+    grid.add_column(style=GREEN)
+
+    rate_str      = f"{rate:.6f}" if rate is not None else "N/A"
+    converted_str = f"{converted:,.4f} {to_ccy}" if converted is not None else "N/A"
+    amount_str    = f"{amount:,.4f} {from_ccy}"
+
+    grid.add_row("Amount",    amount_str)
+    grid.add_row("Spot Rate", f"1 {from_ccy} = {rate_str} {to_ccy}")
+    grid.add_row("Converted", converted_str)
+
+    console.print()
+    console.print(Panel(grid, title=title, border_style="yellow", padding=(1, 3)))
+    console.print()
+
+
+# ─── FX: FXHV ─────────────────────────────────────────────────────────────────
+
+def render_fxhv(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]FXHV ERROR:[/{RED}] {result['message']}")
+        return
+
+    d     = result["data"]
+    pair  = d.get("pair", "")
+    as_of = d.get("as_of", "")
+
+    title = (
+        f"[{ORANGE}]FXHV[/{ORANGE}]  "
+        f"[{HEADER}]{pair} — Historical Volatility[/{HEADER}]  "
+        f"[{DIM}]{as_of}[/{DIM}]"
+    )
+
+    t = Table(border_style="dim", header_style=HEADER, show_lines=False)
+    t.add_column("Window",            style=DIM, min_width=8)
+    t.add_column("Ann. HV (% p.a.)", justify="right", style=GREEN, min_width=18)
+
+    windows = [
+        ("10-Day",  "vol_10d"),
+        ("20-Day",  "vol_20d"),
+        ("30-Day",  "vol_30d"),
+        ("60-Day",  "vol_60d"),
+        ("90-Day",  "vol_90d"),
+        ("180-Day", "vol_180d"),
+        ("1-Year",  "vol_1y"),
+    ]
+
+    for label, key in windows:
+        val = d.get(key)
+        val_str = f"{val:.2f}%" if val is not None else "N/A"
+        t.add_row(label, val_str)
+
+    console.print()
+    console.print(Panel(t, title=title, border_style="yellow", padding=(1, 2)))
+    console.print()
+
+
+# ─── FX: FRD ──────────────────────────────────────────────────────────────────
+
+def render_frd(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]FRD ERROR:[/{RED}] {result['message']}")
+        return
+
+    d     = result["data"]
+    pair  = d.get("pair", "")
+    spot  = d.get("spot")
+    as_of = d.get("as_of", "")
+    note  = result.get("note", "")
+
+    spot_str = f"{spot:.5f}" if spot is not None else "N/A"
+    title = (
+        f"[{ORANGE}]FRD[/{ORANGE}]  "
+        f"[{HEADER}]{pair} Forward Rates[/{HEADER}]  "
+        f"[{DIM}]Spot: {spot_str}  {as_of}[/{DIM}]"
+    )
+
+    t = Table(border_style="dim", header_style=HEADER, show_lines=False, expand=False)
+    t.add_column("Tenor",          style=ORANGE, min_width=6,  no_wrap=True)
+    t.add_column("Days",           justify="right", style=DIM,  min_width=5)
+    t.add_column("Fwd Rate",       justify="right", style=GREEN, min_width=12)
+    t.add_column("Fwd Pts (pips)", justify="right", style=GREEN, min_width=15)
+    t.add_column("Impl Yld Diff",  justify="right", style=DIM,   min_width=14)
+
+    for tenor in d.get("tenors", []):
+        fwd  = tenor.get("forward_rate")
+        pts  = tenor.get("forward_points")
+        diff = tenor.get("implied_yield_diff")
+
+        fwd_str  = f"{fwd:.5f}" if fwd is not None else "N/A"
+        pts_str  = f"{pts:+.2f}" if pts is not None else "N/A"
+        diff_str = f"{diff:+.2f}%" if diff is not None else "N/A"
+
+        t.add_row(
+            tenor.get("tenor", ""),
+            str(tenor.get("days", "")),
+            fwd_str,
+            pts_str,
+            diff_str,
+        )
+
+    console.print()
+    console.print(Panel(t, title=title, border_style="yellow", padding=(1, 2)))
+    if note:
+        console.print(f"  [{DIM}]i  {note}[/{DIM}]")
+    console.print()
+
+
+# ─── FX: WCR ──────────────────────────────────────────────────────────────────
+
+def render_wcr(result: dict) -> None:
+    if result["status"] == "error":
+        console.print(f"[{RED}]WCR ERROR:[/{RED}] {result['message']}")
+        return
+
+    d       = result["data"]
+    group   = result.get("group", "g10").upper()
+    sort_by = result.get("sort_by", "1d").upper()
+    as_of   = d.get("as_of", "")
+
+    title = (
+        f"[{ORANGE}]WCR[/{ORANGE}]  "
+        f"[{HEADER}]World Currency Ranker — {group} vs USD[/{HEADER}]  "
+        f"[{DIM}]Sorted by {sort_by}  {as_of}[/{DIM}]"
+    )
+
+    t = Table(border_style="dim", header_style=HEADER, show_lines=False, expand=True)
+    t.add_column("Rank", justify="right", style=DIM,    min_width=5)
+    t.add_column("CCY",  style=ORANGE,    min_width=5,  no_wrap=True)
+    t.add_column("Spot", justify="right", style=GREEN,  min_width=10)
+    t.add_column("1D",   justify="right", min_width=8)
+    t.add_column("1W",   justify="right", min_width=8)
+    t.add_column("1M",   justify="right", min_width=8)
+    t.add_column("3M",   justify="right", min_width=8)
+    t.add_column("YTD",  justify="right", min_width=8)
+
+    def _pct(v):
+        if v is None:
+            return "N/A"
+        colour = GREEN if v >= 0 else RED
+        arrow  = "▲" if v >= 0 else "▼"
+        return f"[{colour}]{arrow}{abs(v):.2f}%[/{colour}]"
+
+    for rank, row in enumerate(d.get("rows", []), start=1):
+        spot = row.get("spot")
+        t.add_row(
+            str(rank),
+            row.get("currency", ""),
+            f"{spot:.4f}" if spot is not None else "N/A",
+            _pct(row.get("change_1d")),
+            _pct(row.get("change_1w")),
+            _pct(row.get("change_1m")),
+            _pct(row.get("change_3m")),
+            _pct(row.get("change_ytd")),
+        )
+
+    console.print()
+    console.print(Panel(t, title=title, border_style="yellow", padding=(1, 2)))
+    console.print()

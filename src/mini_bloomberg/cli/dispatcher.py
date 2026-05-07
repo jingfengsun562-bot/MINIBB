@@ -18,6 +18,7 @@ from mini_bloomberg.core.ticker import parse_ticker
 from mini_bloomberg.render.cli_renderer import (
     console, render_anr, render_comp, render_des, render_fa, render_gp,
     render_rpt, render_rv,
+    render_fxip, render_fxca, render_fxhv, render_frd, render_wcr,
     render_error, render_loaded, render_status, ORANGE, HEADER, DIM, GREEN,
 )
 
@@ -34,7 +35,16 @@ def _registry():
     from mini_bloomberg.functions.comp import COMP
     from mini_bloomberg.functions.rpt  import RPT
     from mini_bloomberg.functions.rv   import RV
-    return {"DES": DES, "FA": FA, "GP": GP, "ANR": ANR, "COMP": COMP, "RPT": RPT, "RV": RV}
+    from mini_bloomberg.functions.fxip import FXIP
+    from mini_bloomberg.functions.fxca import FXCA
+    from mini_bloomberg.functions.fxhv import FXHV
+    from mini_bloomberg.functions.frd  import FRD
+    from mini_bloomberg.functions.wcr  import WCR
+    return {
+        "DES": DES, "FA": FA, "GP": GP, "ANR": ANR,
+        "COMP": COMP, "RPT": RPT, "RV": RV,
+        "FXIP": FXIP, "FXCA": FXCA, "FXHV": FXHV, "FRD": FRD, "WCR": WCR,
+    }
 
 RENDERERS = {
     "DES":  render_des,
@@ -44,6 +54,11 @@ RENDERERS = {
     "COMP": render_comp,
     "RPT":  render_rpt,
     "RV":   render_rv,
+    "FXIP": render_fxip,
+    "FXCA": render_fxca,
+    "FXHV": render_fxhv,
+    "FRD":  render_frd,
+    "WCR":  render_wcr,
 }
 
 ASSET_CLASSES = {"EQUITY", "BOND", "COMDTY", "CURNCY", "INDEX"}
@@ -177,10 +192,22 @@ def _parse_function_kwargs(cmd: str, args: list[str]) -> dict:
             except TickerError:
                 args = ticker_parts + remaining  # put back, not a ticker
 
-    # Parse --days / --years flags
+    # Parse --days / --years / FX string flags
+    _STR_FLAGS = {
+        "base":    "base",
+        "quote":   "quote",
+        "pair":    "pair",
+        "from":    "from_ccy",
+        "from-ccy":"from_ccy",
+        "to":      "to_ccy",
+        "to-ccy":  "to_ccy",
+        "group":   "group",
+        "sort-by": "sort_by",
+        "sortby":  "sort_by",
+    }
     i = 0
     while i < len(args):
-        tok = args[i].lstrip("-")
+        tok = args[i].lstrip("-").lower()
         if tok in ("days", "d") and i + 1 < len(args):
             try:
                 kwargs["days"] = int(args[i + 1])
@@ -195,6 +222,17 @@ def _parse_function_kwargs(cmd: str, args: list[str]) -> dict:
                 continue
             except ValueError:
                 pass
+        if tok == "amount" and i + 1 < len(args):
+            try:
+                kwargs["amount"] = float(args[i + 1])
+                i += 2
+                continue
+            except ValueError:
+                pass
+        if tok in _STR_FLAGS and i + 1 < len(args):
+            kwargs[_STR_FLAGS[tok]] = args[i + 1]
+            i += 2
+            continue
         i += 1
 
     return kwargs
@@ -215,6 +253,11 @@ def _render_help() -> None:
         ("COMP <GO>",     "Comparable companies side-by-side",         "COMP <GO>"),
         ("RPT <GO>",      "Full equity report + Markdown file",        "RPT <GO>"),
         ("RV <GO>",       "Relative value vs. peers",                  "RV <GO>"),
+        ("FXIP <GO>",     "FX spot monitor: G10/EM vs USD",            "FXIP --group em <GO>"),
+        ("FXCA <GO>",     "FX calculator: convert between currencies", "FXCA --from USD --to JPY --amount 1000 <GO>"),
+        ("FXHV <GO>",     "FX historical volatility (multi-window)",   "FXHV --base EUR --quote USD <GO>"),
+        ("FRD <GO>",      "FX forward rate curve (CIP-implied)",       "FRD --base EUR --quote USD <GO>"),
+        ("WCR <GO>",      "World currency ranker by performance",      "WCR --group g10 --sort-by 1m <GO>"),
         ("? <query>",     "Ask the AI analyst a question",             "? compare NVDA AMD <GO>"),
         ("HELP <GO>",     "Show this help screen",                     "HELP <GO>"),
         ("QUIT <GO>",     "Exit Mini-Bloomberg",                       "QUIT <GO>"),
