@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini-Bloomberg — System Architecture &amp; Module Roadmap</title>
+<style>
+:root {
+  --bg:         #0A0A0A;
+  --panel:      #111111;
+  --panel-2:    #161616;
+  --border:     #222222;
+  --border-2:   #303030;
+  --yellow:     #F5C518;
+  --yellow-dim: rgba(245,197,24,0.12);
+  --green:      #00A878;
+  --green-dim:  rgba(0,168,120,0.10);
+  --blue:       #4A90D9;
+  --blue-dim:   rgba(74,144,217,0.10);
+  --text:       #DCDCDC;
+  --text-2:     #888888;
+  --muted:      #484848;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+/* ── HEADER ─────────────────────────────────────────────────── */
+.header-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: #050505;
+  border-bottom: 2px solid var(--yellow);
+  padding: 14px 62px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.logo {
+  font-family: 'Courier New', monospace;
+  font-size: 22px; font-weight: 700;
+  color: var(--yellow); letter-spacing: 4px;
+}
+.logo-sub {
+  color: var(--muted); font-size: 16px; font-weight: 400;
+  letter-spacing: 1px; margin-left: 16px;
+}
+.header-meta {
+  font-family: 'Courier New', monospace;
+  font-size: 14px; color: var(--muted);
+}
+
+/* ── HERO ────────────────────────────────────────────────────── */
+.hero {
+  padding: 68px 78px 57px;
+  border-bottom: 1px solid var(--border);
+}
+.hero-eyebrow {
+  font-family: 'Courier New', monospace;
+  font-size: 13px; font-weight: 700;
+  color: var(--yellow); letter-spacing: 4px;
+  margin-bottom: 16px;
+}
+.hero-title {
+  font-size: 39px; font-weight: 700;
+  color: #fff; letter-spacing: 0.5px;
+  margin-bottom: 13px;
+}
+.hero-subtitle {
+  color: var(--text-2); font-size: 20px;
+  margin-bottom: 36px; max-width: 884px;
+}
+.legend { display: flex; gap: 16px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 7px 17px; border-radius: 5px;
+  font-size: 14px; font-weight: 700;
+  font-family: 'Courier New', monospace; letter-spacing: 1px;
+}
+.badge-live    { background: var(--green-dim);  border: 1px solid var(--green); color: var(--green); }
+.badge-roadmap { background: var(--blue-dim);   border: 1px solid var(--blue);  color: var(--blue); }
+.badge-future  { background: var(--yellow-dim); border: 1px solid var(--yellow); color: var(--yellow); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+/* ── SECTION WRAPPER ─────────────────────────────────────────── */
+.section {
+  padding: 68px 78px;
+  border-bottom: 1px solid var(--border);
+}
+.section-eyebrow {
+  font-family: 'Courier New', monospace;
+  font-size: 13px; font-weight: 700;
+  color: var(--yellow); letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+.section-title {
+  font-size: 26px; font-weight: 700;
+  color: var(--text); margin-bottom: 47px;
+}
+
+/* ── ARCHITECTURE SVG ────────────────────────────────────────── */
+.arch-wrap { width: 100%; overflow-x: auto; }
+.arch-wrap svg { display: block; max-width: 1248px; width: 100%; height: auto; }
+
+/* ── MODULE CARDS ────────────────────────────────────────────── */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 21px;
+}
+@media (max-width: 1170px) {
+  .module-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 702px) {
+  .module-grid { grid-template-columns: 1fr; }
+}
+
+.module-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 29px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.module-card:hover { border-color: var(--border-2); }
+
+.module-card.card-live {
+  grid-column: span 2;
+  border-color: rgba(0,168,120,0.35);
+  box-shadow: 0 0 36px rgba(0,168,120,0.06);
+}
+.module-card.card-roadmap { opacity: 0.75; }
+.module-card.card-roadmap:hover { opacity: 1; }
+
+.card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 13px; margin-bottom: 13px;
+}
+.module-name {
+  font-family: 'Courier New', monospace;
+  font-size: 20px; font-weight: 700; letter-spacing: 1px;
+}
+.card-live .module-name { color: var(--green); }
+.card-roadmap .module-name { color: var(--text-2); }
+
+.module-desc {
+  font-size: 17px; color: var(--text-2); line-height: 1.55;
+  margin-bottom: 5px;
+}
+
+.fn-group-label {
+  font-family: 'Courier New', monospace;
+  font-size: 12px; font-weight: 700; letter-spacing: 3px;
+  color: var(--muted); margin-top: 23px; margin-bottom: 10px;
+}
+.fn-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.fn-tag {
+  padding: 4px 12px; border-radius: 4px;
+  font-size: 14px; font-weight: 700;
+  font-family: 'Courier New', monospace; letter-spacing: 0.5px;
+}
+.fn-impl {
+  background: rgba(0,168,120,0.13);
+  border: 1px solid rgba(0,168,120,0.38);
+  color: var(--green);
+}
+.fn-next {
+  background: rgba(245,197,24,0.07);
+  border: 1px solid rgba(245,197,24,0.25);
+  color: rgba(245,197,24,0.65);
+}
+
+/* ── TECH STACK ──────────────────────────────────────────────── */
+.stack-rows { display: flex; flex-direction: column; gap: 23px; }
+.stack-row { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap; }
+.stack-layer-label {
+  font-family: 'Courier New', monospace;
+  font-size: 13px; font-weight: 700; letter-spacing: 3px;
+  color: var(--text-2); min-width: 104px; flex-shrink: 0;
+}
+.stack-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 5px 17px;
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  color: var(--text-2);
+}
+
+/* ── WEB APP WIREFRAME ───────────────────────────────────────── */
+.webapp-callout {
+  background: var(--yellow-dim);
+  border: 1px solid rgba(245,197,24,0.28);
+  border-radius: 8px;
+  padding: 16px 23px;
+  font-size: 17px; color: rgba(245,197,24,0.88);
+  margin-bottom: 42px; max-width: 988px;
+}
+.webapp-callout strong { color: var(--yellow); }
+
+.wireframe {
+  border: 1px solid var(--border-2);
+  border-radius: 13px;
+  overflow: hidden;
+  max-width: 1196px;
+  box-shadow: 0 10px 52px rgba(0,0,0,0.6);
+}
+
+/* top bar */
+.wf-topbar {
+  background: #060606;
+  border-bottom: 1px solid var(--yellow);
+  padding: 13px 23px;
+  display: flex; align-items: center; gap: 18px;
+}
+.wf-logo {
+  font-family: 'Courier New', monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--yellow); letter-spacing: 3px; white-space: nowrap;
+}
+.wf-search {
+  flex: 1; max-width: 494px;
+  background: #181818;
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  padding: 8px 16px;
+  font-family: 'Courier New', monospace; font-size: 16px;
+  color: var(--text-2);
+}
+.wf-clock {
+  margin-left: auto;
+  font-family: 'Courier New', monospace; font-size: 16px;
+  color: var(--muted);
+}
+
+/* body layout */
+.wf-body {
+  display: flex;
+  height: 546px;
+}
+
+/* left sidebar */
+.wf-sidebar {
+  width: 202px; flex-shrink: 0;
+  background: #090909;
+  border-right: 1px solid var(--border);
+  padding: 18px 0;
+}
+.wf-nav {
+  padding: 10px 21px;
+  font-family: 'Courier New', monospace; font-size: 16px;
+  color: var(--muted);
+  display: flex; align-items: center; gap: 12px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.wf-nav.active {
+  color: var(--green);
+  border-left-color: var(--green);
+  background: rgba(0,168,120,0.05);
+}
+.wf-nav-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+/* main area */
+.wf-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.wf-subtabs {
+  background: #0C0C0C;
+  border-bottom: 1px solid var(--border);
+  padding: 0 21px;
+  display: flex;
+}
+.wf-tab {
+  padding: 12px 17px;
+  font-family: 'Courier New', monospace; font-size: 14px; letter-spacing: 1px;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+.wf-tab.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+
+.wf-content { flex: 1; padding: 26px; background: var(--panel); overflow: hidden; }
+
+.wf-ticker-line { margin-bottom: 18px; }
+.wf-ticker { font-family: 'Courier New', monospace; font-size: 26px; font-weight: 700; color: var(--yellow); }
+.wf-ticker-sub { font-size: 16px; color: var(--text-2); margin-top: 4px; }
+
+.wf-table {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.wf-row {
+  display: flex; justify-content: space-between;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Courier New', monospace; font-size: 16px;
+}
+.wf-row:last-child { border-bottom: none; }
+.wf-lbl { color: var(--text-2); }
+.wf-val { color: var(--text); }
+.wf-pos { color: var(--green); }
+
+/* agent panel */
+.wf-agent {
+  width: 273px; flex-shrink: 0;
+  background: #090909;
+  border-left: 1px solid var(--border);
+  padding: 21px;
+  display: flex; flex-direction: column;
+}
+.wf-agent-title {
+  font-family: 'Courier New', monospace;
+  font-size: 13px; font-weight: 700; letter-spacing: 3px;
+  color: var(--yellow); margin-bottom: 18px;
+}
+.wf-bubble {
+  font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.5;
+  color: var(--text-2);
+  padding: 10px 13px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+.wf-bubble.agent-reply { color: rgba(0,168,120,0.8); border-color: rgba(0,168,120,0.2); background: rgba(0,168,120,0.04); }
+.wf-input-row {
+  margin-top: auto;
+  display: flex; align-items: center; gap: 9px;
+  background: var(--panel-2); border: 1px solid var(--border-2);
+  border-radius: 5px; padding: 9px 13px;
+  font-family: 'Courier New', monospace; font-size: 14px; color: var(--muted);
+}
+.wf-prompt-char { color: var(--yellow); font-weight: 700; }
+
+/* status bar */
+.wf-statusbar {
+  background: #050505;
+  border-top: 1px solid var(--border);
+  padding: 8px 23px;
+  display: flex; gap: 31px;
+  font-family: 'Courier New', monospace; font-size: 14px; color: var(--muted);
+}
+.wf-live-dot { color: var(--green); }
+
+/* ── FOOTER ──────────────────────────────────────────────────── */
+.footer {
+  padding: 29px 78px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Courier New', monospace; font-size: 14px; color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ HEADER -->
+<div class="header-bar">
+  <div>
+    <span class="logo">MINI-BLOOMBERG</span>
+    <span class="logo-sub">// SYSTEM ARCHITECTURE &amp; MODULE ROADMAP</span>
+  </div>
+  <div class="header-meta">OpenBB · FMP · Claude · 2026-05-04</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">PROJECT BLUEPRINT</div>
+  <div class="hero-title">System Architecture &amp; Module Roadmap</div>
+  <div class="hero-subtitle">
+    A Bloomberg Terminal emulator powered by OpenBB + FMP data and Claude as the natural-language orchestrator.
+    Equity analysis is live today; the full terminal — and a web UI — are on the roadmap.
+  </div>
+  <div class="legend">
+    <div class="badge badge-live">   <div class="dot"></div> LIVE — Equity (7 functions)</div>
+    <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP — 6 Modules planned</div>
+    <div class="badge badge-future"> <div class="dot"></div> ★ Future — Web App replaces CLI</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SECTION 1: ARCH -->
+<div class="section">
+  <div class="section-eyebrow">01 — SYSTEM OVERVIEW</div>
+  <div class="section-title">Architecture &amp; Data Flow</div>
+  <div class="arch-wrap">
+    <svg viewBox="0 0 960 870" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Arrow marker -->
+        <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L9,3.5 z" fill="#404040"/>
+        </marker>
+        <!-- Drop shadow filter -->
+        <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- ═══ LAYER TICK LABELS (far right) ═══════════════════════════ -->
+      <text x="952" y="74"  text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">INPUT</text>
+      <text x="952" y="247" text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">ROUTING</text>
+      <text x="952" y="410" text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">AGENT</text>
+      <text x="952" y="566" text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">FUNCTIONS</text>
+      <text x="952" y="706" text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">DATA</text>
+      <text x="952" y="820" text-anchor="end" font-family="Courier New,monospace" font-size="9" fill="#333" letter-spacing="1.5">OUTPUT</text>
+
+      <!-- ═══ LAYER 0: INPUT ══════════════════════════════════════════ -->
+      <!-- Web UI box (future) -->
+      <rect x="18" y="28" width="424" height="96" rx="6" fill="#0C1828" stroke="#4A90D9" stroke-width="1.5"/>
+      <rect x="18" y="28" width="424" height="4"  rx="2" fill="#4A90D9"/>
+      <!-- title -->
+      <text x="38" y="56" font-family="Courier New,monospace" font-size="13" font-weight="bold" fill="#C8DCF0" letter-spacing="1.5">WEB UI</text>
+      <!-- FUTURE badge -->
+      <rect x="114" y="42" width="72" height="18" rx="3" fill="rgba(245,197,24,0.15)" stroke="rgba(245,197,24,0.5)" stroke-width="1"/>
+      <text x="150" y="55" text-anchor="middle" font-family="Courier New,monospace" font-size="9" font-weight="bold" fill="#F5C518" letter-spacing="1">★ FUTURE</text>
+      <!-- sub lines -->
+      <text x="38" y="76" font-family="Courier New,monospace" font-size="11" fill="#5A8AB0">Browser / Dashboard · REST API calls</text>
+      <text x="38" y="94" font-family="Courier New,monospace" font-size="10" fill="#2A4A6A">HTML + CSS + JS frontend → HTTP/JSON</text>
+
+      <!-- CLI box (current) -->
+      <rect x="518" y="28" width="424" height="96" rx="6" fill="#111" stroke="#404040" stroke-width="1.5"/>
+      <rect x="518" y="28" width="424" height="4"  rx="2" fill="#505050"/>
+      <text x="538" y="56" font-family="Courier New,monospace" font-size="13" font-weight="bold" fill="#D0D0D0" letter-spacing="1.5">CLI TERMINAL</text>
+      <!-- CURRENT badge -->
+      <rect x="660" y="42" width="78" height="18" rx="3" fill="rgba(0,168,120,0.12)" stroke="rgba(0,168,120,0.45)" stroke-width="1"/>
+      <text x="699" y="55" text-anchor="middle" font-family="Courier New,monospace" font-size="9" font-weight="bold" fill="#00A878" letter-spacing="1">· CURRENT</text>
+      <text x="538" y="76" font-family="Courier New,monospace" font-size="11" fill="#707070">REPL + prompt-toolkit · Typer commands</text>
+      <text x="538" y="94" font-family="Courier New,monospace" font-size="10" fill="#3A3A3A">Rich tables · plotext ASCII charts</text>
+
+      <!-- Arrows: Input → Routing -->
+      <line x1="230" y1="124" x2="230" y2="202" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="730" y1="124" x2="730" y2="202" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ═══ LAYER 1: ROUTING ════════════════════════════════════════ -->
+      <!-- HTTP API box (future, dashed) -->
+      <rect x="18" y="207" width="424" height="80" rx="6" fill="#0A1520" stroke="#2A5888" stroke-width="1.5" stroke-dasharray="7,3"/>
+      <text x="38" y="233" font-family="Courier New,monospace" font-size="12" font-weight="bold" fill="#4A7AAA" letter-spacing="1">HTTP API / FastAPI</text>
+      <text x="38" y="252" font-family="Courier New,monospace" font-size="11" fill="#2A4A6A">Request parsing · auth · rate limiting</text>
+      <text x="38" y="270" font-family="Courier New,monospace" font-size="10" fill="#1A3040">To-be-built backend layer ─ dashed = planned</text>
+
+      <!-- CLI Dispatcher box (current) -->
+      <rect x="518" y="207" width="424" height="80" rx="6" fill="#0E0E0E" stroke="#383838" stroke-width="1.5"/>
+      <text x="538" y="233" font-family="Courier New,monospace" font-size="12" font-weight="bold" fill="#AFAFAF" letter-spacing="1">CLI DISPATCHER</text>
+      <text x="538" y="252" font-family="Courier New,monospace" font-size="11" fill="#686868">Session state · ticker routing · REPL loop</text>
+      <text x="538" y="270" font-family="Courier New,monospace" font-size="10" fill="#3A3A3A">cli/dispatcher.py · cli/repl.py</text>
+
+      <!-- Merge: two vertical lines → horizontal bar → single arrow to Agent -->
+      <line x1="230" y1="287" x2="230" y2="338" stroke="#303030" stroke-width="1.5"/>
+      <line x1="730" y1="287" x2="730" y2="338" stroke="#303030" stroke-width="1.5"/>
+      <line x1="230" y1="338" x2="730" y2="338" stroke="#303030" stroke-width="1.5"/>
+      <circle cx="480" cy="338" r="3.5" fill="#404040"/>
+      <line x1="480" y1="338" x2="480" y2="373" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ═══ LAYER 2: CLAUDE AGENT ═══════════════════════════════════ -->
+      <rect x="178" y="378" width="604" height="96" rx="6" fill="#181000" stroke="#C8A000" stroke-width="1.5"/>
+      <rect x="178" y="378" width="604" height="4"  rx="2" fill="#F5C518"/>
+      <text x="480" y="408" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="bold" fill="#F5C518" letter-spacing="2">CLAUDE AGENT  —  Shared Layer</text>
+      <text x="480" y="428" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#B09800">Orchestrator · Tool-use loop · claude-sonnet-4-6</text>
+      <text x="480" y="446" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#706800">Prompt caching · streaming · agents/orchestrator.py</text>
+      <text x="480" y="462" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484000">"? Why has AAPL outperformed MSFT?"  →  tool calls  →  functions</text>
+
+      <!-- Arrow: Agent → Functions -->
+      <line x1="480" y1="474" x2="480" y2="518" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ═══ LAYER 3: FUNCTIONS ══════════════════════════════════════ -->
+      <rect x="18" y="523" width="924" height="96" rx="6" fill="#111" stroke="#303030" stroke-width="1.5"/>
+      <text x="480" y="551" text-anchor="middle" font-family="Courier New,monospace" font-size="12" font-weight="bold" fill="#A0A0A0" letter-spacing="2">FUNCTIONS LAYER  —  BloombergFunction ABC  ·  .run()  ·  .tool_schema()</text>
+
+      <!-- Module badges inside the functions box -->
+      <!-- EQUITY (live, green) -->
+      <rect x="34"  y="560" width="86"  height="44" rx="4" fill="rgba(0,168,120,0.12)" stroke="rgba(0,168,120,0.45)" stroke-width="1"/>
+      <text x="77"  y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" font-weight="bold" fill="#00A878">EQUITY</text>
+      <text x="77"  y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#00A878">● LIVE</text>
+
+      <!-- FIXED INCOME -->
+      <rect x="130" y="560" width="118" height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="189" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">FIXED INCOME</text>
+      <text x="189" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- FX -->
+      <rect x="258" y="560" width="64"  height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="290" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">FX</text>
+      <text x="290" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- COMMODITIES -->
+      <rect x="332" y="560" width="120" height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="392" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">COMMODITIES</text>
+      <text x="392" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- FUNDS -->
+      <rect x="462" y="560" width="72"  height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="498" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">FUNDS</text>
+      <text x="498" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- NEWS -->
+      <rect x="544" y="560" width="72"  height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="580" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">NEWS</text>
+      <text x="580" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- INDEX -->
+      <rect x="626" y="560" width="72"  height="44" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="662" y="579" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#484848">INDEX</text>
+      <text x="662" y="595" text-anchor="middle" font-family="Courier New,monospace" font-size="8"  fill="#303030">○ ROADMAP</text>
+
+      <!-- Arrow: Functions → Data -->
+      <line x1="480" y1="619" x2="480" y2="654" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ═══ LAYER 4: DATA ═══════════════════════════════════════════ -->
+      <rect x="18" y="659" width="924" height="80" rx="6" fill="#111" stroke="#303030" stroke-width="1.5"/>
+      <text x="480" y="685" text-anchor="middle" font-family="Courier New,monospace" font-size="12" font-weight="bold" fill="#A0A0A0" letter-spacing="2">DATA LAYER</text>
+
+      <!-- FMP -->
+      <rect x="52"  y="694" width="230" height="33" rx="4" fill="#0C180C" stroke="#245024" stroke-width="1"/>
+      <text x="167" y="715" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#4A844A">FMP API  ·  US Equities (primary)</text>
+
+      <!-- OpenBB -->
+      <rect x="296" y="694" width="250" height="33" rx="4" fill="#0C180C" stroke="#245024" stroke-width="1"/>
+      <text x="421" y="715" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#4A844A">OpenBB / yfinance  ·  Non-US fallback</text>
+
+      <!-- Cache -->
+      <rect x="560" y="694" width="210" height="33" rx="4" fill="#181400" stroke="#504800" stroke-width="1"/>
+      <text x="665" y="715" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#908000">DiskCache  ·  24 h TTL</text>
+
+      <!-- Arrow: Data → Output -->
+      <line x1="480" y1="739" x2="480" y2="774" stroke="#303030" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ═══ LAYER 5: OUTPUT ═════════════════════════════════════════ -->
+      <rect x="18" y="779" width="924" height="70" rx="6" fill="#111" stroke="#303030" stroke-width="1.5"/>
+      <text x="480" y="803" text-anchor="middle" font-family="Courier New,monospace" font-size="12" font-weight="bold" fill="#A0A0A0" letter-spacing="2">OUTPUT / RENDER LAYER</text>
+
+      <!-- Web Dashboard (future, highlighted) -->
+      <rect x="36"  y="812" width="185" height="28" rx="4" fill="rgba(74,144,217,0.13)" stroke="rgba(74,144,217,0.4)" stroke-width="1"/>
+      <text x="128" y="830" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#4A90D9">★ Web Dashboard</text>
+
+      <!-- CLI Tables -->
+      <rect x="233" y="812" width="140" height="28" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="303" y="830" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#505050">CLI Tables</text>
+
+      <!-- HTML Reports -->
+      <rect x="385" y="812" width="150" height="28" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="460" y="830" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#505050">HTML Reports</text>
+
+      <!-- JSON/LLM -->
+      <rect x="547" y="812" width="140" height="28" rx="4" fill="#0D0D0D" stroke="#282828" stroke-width="1"/>
+      <text x="617" y="830" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#505050">JSON / LLM</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ SECTION 2: MODULES -->
+<div class="section">
+  <div class="section-eyebrow">02 — MODULE LANDSCAPE</div>
+  <div class="section-title">Bloomberg Modules — Implementation Status</div>
+  <div class="module-grid">
+
+    <!-- EQUITY: LIVE -->
+    <div class="module-card card-live">
+      <div class="card-header">
+        <div class="module-name">EQUITY</div>
+        <div class="badge badge-live"><div class="dot"></div> LIVE</div>
+      </div>
+      <div class="module-desc">
+        Stock screening, fundamental analysis, price charting, analyst consensus, valuation, peer comparison, and full HTML report generation.
+      </div>
+      <div class="fn-group-label">IMPLEMENTED</div>
+      <div class="fn-tags">
+        <span class="fn-tag fn-impl">DES</span>
+        <span class="fn-tag fn-impl">FA</span>
+        <span class="fn-tag fn-impl">GP</span>
+        <span class="fn-tag fn-impl">ANR</span>
+        <span class="fn-tag fn-impl">COMP</span>
+        <span class="fn-tag fn-impl">RV</span>
+        <span class="fn-tag fn-impl">RPT</span>
+      </div>
+      <div class="fn-group-label">NEXT PRIORITY</div>
+      <div class="fn-tags">
+        <span class="fn-tag fn-next">DVD</span>
+        <span class="fn-tag fn-next">ERN</span>
+        <span class="fn-tag fn-next">EE</span>
+        <span class="fn-tag fn-next">SI</span>
+        <span class="fn-tag fn-next">OWN</span>
+        <span class="fn-tag fn-next">EVTS</span>
+        <span class="fn-tag fn-next">MOST</span>
+      </div>
+    </div>
+
+    <!-- FIXED INCOME -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">FIXED INCOME</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Bond search, yield curves, spread analytics, and structured products.</div>
+    </div>
+
+    <!-- FX -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">FX</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Spot rates, forwards, volatility surfaces, and FX strategy tools.</div>
+    </div>
+
+    <!-- COMMODITIES -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">COMMODITIES</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Energy, metals, and agriculture futures and global market data.</div>
+    </div>
+
+    <!-- FUNDS -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">FUNDS</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Mutual funds, ETFs, and hedge fund analytics and screening.</div>
+    </div>
+
+    <!-- NEWS -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">NEWS &amp; RESEARCH</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Real-time news, analyst reports, regulatory filings, and sentiment.</div>
+    </div>
+
+    <!-- INDEX -->
+    <div class="module-card card-roadmap">
+      <div class="card-header">
+        <div class="module-name">INDEX</div>
+        <div class="badge badge-roadmap"><div class="dot"></div> ROADMAP</div>
+      </div>
+      <div class="module-desc">Global benchmark indices, constituents, and performance monitoring.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ SECTION 3: TECH STACK -->
+<div class="section">
+  <div class="section-eyebrow">03 — TECH STACK</div>
+  <div class="section-title">Locked Dependencies</div>
+  <div class="stack-rows">
+    <div class="stack-row">
+      <div class="stack-layer-label">DATA</div>
+      <div class="stack-chips">
+        <div class="chip">openbb ≥ 4.3</div>
+        <div class="chip">requests  (FMP REST)</div>
+        <div class="chip">pydantic ≥ 2.8</div>
+        <div class="chip">diskcache ≥ 5.6</div>
+      </div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-layer-label">CLI / UI</div>
+      <div class="stack-chips">
+        <div class="chip">typer ≥ 0.12</div>
+        <div class="chip">rich ≥ 13.7</div>
+        <div class="chip">plotext ≥ 5.2</div>
+        <div class="chip">prompt-toolkit ≥ 3.0</div>
+      </div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-layer-label">LLM</div>
+      <div class="stack-chips">
+        <div class="chip">anthropic ≥ 0.40</div>
+        <div class="chip">claude-sonnet-4-6</div>
+      </div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-layer-label">INFRA</div>
+      <div class="stack-chips">
+        <div class="chip">python ≥ 3.11</div>
+        <div class="chip">uv  (package manager)</div>
+        <div class="chip">python-dotenv ≥ 1.0</div>
+        <div class="chip">pytest ≥ 8.0</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ SECTION 4: WEB APP -->
+<div class="section">
+  <div class="section-eyebrow">04 — TARGET DIRECTION  ★</div>
+  <div class="section-title">Web App — Replacing CLI as Primary Interface</div>
+
+  <div class="webapp-callout">
+    ★ The <strong>Functions layer and Data layer are unchanged</strong>. Only the I/O layer changes: CLI REPL → Web UI.
+    The same <code style="font-family:monospace;font-size:16px;">.run()</code> methods and tool schemas power both today's terminal and tomorrow's browser dashboard.
+  </div>
+
+  <!-- Wireframe -->
+  <div class="wireframe">
+
+    <!-- Top bar -->
+    <div class="wf-topbar">
+      <div class="wf-logo">MINI-BLOOMBERG</div>
+      <div class="wf-search">AAPL US Equity ▎</div>
+      <div class="wf-clock" id="wf-clock">16:42:07 EST</div>
+    </div>
+
+    <!-- Body -->
+    <div class="wf-body">
+
+      <!-- Left sidebar -->
+      <div class="wf-sidebar">
+        <div class="wf-nav active"><div class="wf-nav-dot"></div>EQUITY</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>FIXED INC.</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>FX</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>COMMODITIES</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>FUNDS</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>NEWS</div>
+        <div class="wf-nav"><div class="wf-nav-dot" style="background:var(--muted)"></div>INDEX</div>
+      </div>
+
+      <!-- Main area -->
+      <div class="wf-main">
+        <!-- Function sub-tabs -->
+        <div class="wf-subtabs">
+          <div class="wf-tab active">DES</div>
+          <div class="wf-tab">FA</div>
+          <div class="wf-tab">GP</div>
+          <div class="wf-tab">ANR</div>
+          <div class="wf-tab">COMP</div>
+          <div class="wf-tab">RV</div>
+          <div class="wf-tab">RPT</div>
+        </div>
+
+        <!-- Content panel -->
+        <div class="wf-content">
+          <div class="wf-ticker-line">
+            <div class="wf-ticker">AAPL US Equity</div>
+            <div class="wf-ticker-sub">Apple Inc. · NASDAQ · Technology · USD</div>
+          </div>
+          <div class="wf-table">
+            <div class="wf-row"><span class="wf-lbl">Market Cap</span>  <span class="wf-val">$2.84T</span></div>
+            <div class="wf-row"><span class="wf-lbl">Last Price</span>  <span class="wf-pos">$182.50  ▲ +1.24%</span></div>
+            <div class="wf-row"><span class="wf-lbl">P/E Ratio</span>   <span class="wf-val">28.4x</span></div>
+            <div class="wf-row"><span class="wf-lbl">EV / EBITDA</span> <span class="wf-val">22.1x</span></div>
+            <div class="wf-row"><span class="wf-lbl">Sector</span>      <span class="wf-val">Technology</span></div>
+            <div class="wf-row"><span class="wf-lbl">Exchange</span>    <span class="wf-val">NASDAQ (US)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Claude Agent panel -->
+      <div class="wf-agent">
+        <div class="wf-agent-title">CLAUDE AGENT</div>
+        <div class="wf-bubble">Why has AAPL outperformed MSFT over the past year?</div>
+        <div class="wf-bubble agent-reply">Fetching GP, FA data... comparing margin expansion and re-rating...</div>
+        <div class="wf-input-row"><span class="wf-prompt-char">?</span> Ask anything...</div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="wf-statusbar">
+      <span><span class="wf-live-dot">●</span> AAPL US Equity</span>
+      <span>FMP · OpenBB</span>
+      <span>Cache HIT</span>
+      <span style="margin-left:auto">Updated 16:41:55</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ FOOTER -->
+<div class="footer">
+  <span>MINI-BLOOMBERG · System Architecture v1.0</span>
+  <span>1 module live · 6 planned · Web UI on the roadmap</span>
+</div>
+
+<script>
+  // Live clock in the wireframe
+  (function () {
+    const el = document.getElementById('wf-clock');
+    function tick() {
+      const d = new Date();
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const s = String(d.getSeconds()).padStart(2, '0');
+      el.textContent = h + ':' + m + ':' + s + ' LOCAL';
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+</body>
+</html>
