@@ -9,6 +9,8 @@ A CLI terminal that mimics Bloomberg for equity and FX analysis, powered by **Op
 │  Equity: DES / FA / GP / ANR / COMP / RV / RPT                             │
 │  FX:     FXIP / FXCA / FXHV / FRD / WCR                                   │
 │  Prefix with ? to ask the AI analyst. HELP <GO> for all commands.          │
+│                                                                             │
+│  Run in terminal (CLI) or browser (Web UI at localhost:8000)                │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 
 MINI-BB> AAPL US Equity <GO>
@@ -59,6 +61,9 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 | Command | What it does |
 |---|---|
 | `? <query>` | Claude agent with tool-use — runs any function and synthesises an answer |
+| `CLEAR HISTORY <GO>` | Wipe the agent's in-session conversation memory |
+
+**Interfaces**: CLI terminal (Rich tables, streaming agent) and Web UI (Bloomberg-style browser terminal at `localhost:8000`).
 
 **Global equity coverage**: US, HK, JP, FR, DE, UK and more via `SYMBOL EXCHANGE Equity` format.
 
@@ -67,31 +72,44 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 ## Architecture
 
 ```
-User input
-    │
-    ▼
-cli/repl.py          ← prompt-toolkit REPL (history, tab-complete, status bar)
-    │
-    ▼
-cli/dispatcher.py    ← routes: TICKER <GO> | FUNCTION <GO> | ? query <GO>
-    │
-    ├── functions/   ← DES / FA / GP / ANR / COMP / RV / RPT  (equity)
-    │               ← FXIP / FXCA / FXHV / FRD / WCR         (FX)
-    │                      (BloombergFunction ABC)
-    │       │              each implements .run() and .tool_schema()
-    │       ▼
-    │   data/        ← provider routers → FMP (US) or OpenBB/yfinance (non-US)
-    │       │              returns Pydantic models, cached 24h via diskcache
-    │       ▼
-    │   render/      ← cli_renderer.py (Rich panels/tables/plotext charts)
-    │               ← html_renderer.py (investment-bank-style HTML reports)
-    │
-    └── agents/      ← orchestrator.py: Claude tool-use loop (streaming)
-            │              prompts.py: junior analyst system prompt
-            └── tools.py: auto-generates Anthropic tool specs from functions
+                      ┌─────────────────────────────────┐
+                      │         Entry Points             │
+                      │                                  │
+                      │  CLI: uv run mini-bb             │
+                      │  Web: uvicorn …web.server:app    │
+                      └──────────────┬──────────────────┘
+                                     │
+               ┌─────────────────────┴──────────────────────┐
+               │                                            │
+               ▼                                            ▼
+    cli/repl.py                               web/server.py (FastAPI)
+    └─ cli/dispatcher.py                      ├── GET  /
+       routes: TICKER | FUNCTION | ? query    ├── POST /api/command
+                                              ├── POST /api/agent
+                                              └── GET  /api/status
+               │                                            │
+               └─────────────────────┬──────────────────────┘
+                                     │  (same function layer)
+                                     ▼
+                             functions/
+                       DES / FA / GP / ANR / COMP / RV / RPT   (equity)
+                       FXIP / FXCA / FXHV / FRD / WCR          (FX)
+                       BloombergFunction ABC — .run() + .tool_schema()
+                                     │
+                                     ▼
+                               data/
+                       provider routers → FMP (US) or OpenBB/yfinance (non-US)
+                       Pydantic models, cached via diskcache
+                                     │
+                          ┌──────────┴──────────┐
+                          ▼                     ▼
+                    render/                 agents/
+                    cli_renderer.py         orchestrator.py  ← streaming tool-use loop
+                    html_renderer.py        prompts.py       ← system prompt (editable)
+                    (Rich + plotext)        tools.py         ← auto tool specs from functions
 ```
 
-**Key design**: the CLI path and the LLM agent path both call the **same** `fn.run()` — zero code duplication.
+**Key design**: CLI commands, the web API, and the LLM agent all call the **same** `fn.run()` — zero code duplication. The Anthropic client is a singleton in `core/llm.py` shared across the process.
 
 ---
 
@@ -129,10 +147,34 @@ cp .env.example .env
 
 ### 4. Run
 
+**CLI (terminal)**
 ```bash
-uv run mini-bb          # launch interactive REPL
+uv run mini-bb                        # launch interactive REPL
 uv run mini-bb des "AAPL US Equity"   # one-shot command
 ```
+
+**Web UI — one-click (Windows)**
+```
+Double-click  mini-bb.bat
+```
+The server starts in the background and your browser opens at `http://localhost:8000` automatically. If the server is already running, it just opens the browser.
+
+To pin a Desktop shortcut (run once in PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -File create_shortcut.ps1
+```
+
+**Web UI — manual start**
+```bash
+# Install web server deps (one-time)
+uv add fastapi uvicorn
+
+# Start the server
+uvicorn mini_bloomberg.web.server:app --reload --port 8000
+```
+Then open **http://localhost:8000** in your browser.
+
+The web UI reads the same `.env` file as the CLI — no extra config needed.
 
 ---
 
@@ -162,7 +204,8 @@ WCR <GO>                         G10 currencies ranked by performance
 WCR --group em --sort-by 1m <GO> EM currencies ranked by 1-month return
 
 ── General ─────────────────────────────────────────────────────────────────
-? <your question> <GO>           Ask the AI analyst
+? <your question> <GO>           Ask the AI analyst (remembers this session's context)
+CLEAR HISTORY <GO>               Wipe the AI analyst's conversation memory
 HELP <GO>                        List all commands
 QUIT <GO>                        Exit
 ```
@@ -189,6 +232,54 @@ uv run mini-bb comp "AAPL US Equity"
 uv run mini-bb rv   "AAPL US Equity"
 uv run mini-bb rpt  "AAPL US Equity"
 ```
+
+---
+
+## Web UI
+
+Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port 8000`) and open `http://localhost:8000`.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ◼ MINI-BLOOMBERG                              [status bar]      │
+├──────────────────────────────────────────────────────────────────┤
+│  Command bar:  AAPL US Equity <GO>    [Enter to execute]         │
+├────────────┬────────────────────────────────┬────────────────────┤
+│  Sidebar   │  OUTPUT  │  RAW DATA           │  AI Analyst        │
+│  ─────     │  ─────── │                     │  ─────────────     │
+│  Equities  │  Result  │  Full JSON for      │  Type a question   │
+│  DES FA GP │  tables, │  debugging          │  or prefix cmd     │
+│  ANR COMP  │  charts, │                     │  with ?            │
+│  RV RPT    │  RPT HTML│                     │                    │
+│  ─────     │          │                     │  Tool call log     │
+│  FX        │          │                     │  shown here        │
+│  FXIP FXCA │          │                     │                    │
+│  FXHV FRD  │          │                     │                    │
+│  WCR       │          │                     │                    │
+└────────────┴──────────┴─────────────────────┴────────────────────┘
+```
+
+### API routes
+
+| Method | Route | What it does |
+|---|---|---|
+| `GET` | `/` | Serves the Bloomberg-style terminal UI (`index.html`) |
+| `POST` | `/api/command` | Execute any Bloomberg command; returns structured JSON |
+| `POST` | `/api/agent` | Run a Claude AI agent query with tool-use |
+| `GET` | `/api/status` | Health check + currently loaded ticker |
+
+### Web UI features
+
+- **Command bar**: same Bloomberg-style syntax as the CLI — `AAPL US Equity`, `DES`, `FA`, `GP --days 90`, `? compare AAPL and MSFT`
+- **Tab autocomplete**: suggests commands and tickers as you type
+- **OUTPUT tab**: formatted tables, key-value grids, rating badges, inline RPT HTML
+- **RAW DATA tab**: full JSON response for debugging
+- **AI Agent panel**: natural language questions with tool call log; maintains conversation history within the browser session
+- **Sidebar shortcuts**: click DES, FA, GP, etc. to fill the command bar; command history
+
+### RPT in the web UI
+
+`RPT <GO>` in the web UI renders the full HTML report **inline** in the Output tab — no need to open a separate file.
 
 ---
 
@@ -241,14 +332,14 @@ MINI-BB> RV <GO>
 
 | # | Section | Content |
 |---|---|---|
-| 1 | Company Profile | Key identifiers, description |
-| 2 | Income Statement | Full 4-year IS with section dividers and inline margin % rows |
-| 3 | Balance Sheet | Full 4-year BS across 5 grouped sections |
-| 4 | Cash Flow | Full 4-year CF with OCF / CapEx / FCF margin rows |
-| 5 | Financial Ratios | Profitability, leverage, efficiency — 4 years |
-| 6 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
-| 7 | Analyst Consensus | Rating table + buy/hold/sell progress bars |
-| 8 | Peer Comparison | Subject ticker highlighted in peer table |
+| 1 | Company Profile | Key identifiers, description, exchange info |
+| 2 | Insights | AI-generated "What happened?" + "Our thoughts"; compact analyst consensus + trading data (52w range, avg vol, beta, P/BV …) |
+| 3 | Financial Statements | 4-year income statement, balance sheet, cash flow — side-by-side annual columns |
+| 4 | Financial Ratios | Profitability, leverage, efficiency — 4 years |
+| 5 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
+| 6 | Peer Comparison | Subject ticker highlighted in peer table |
+
+The **Insights section** (§2) makes a silent call to `claude-haiku-4-5-20251001` with recent news headlines and financial summary — cached 24h per ticker. Right-hand column shows analyst consensus (rating pill, price target, upside %) and a trading data table derived from 1-year price history.
 
 Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS with Google Fonts loaded via CDN.
 
@@ -323,9 +414,18 @@ The `?` prefix routes to Claude (`claude-sonnet-4-6` by default, switchable to `
 
 The agent uses **prompt caching** on the system prompt and **streaming output** so you see the answer token-by-token. It runs tool calls in **parallel** (e.g. `FA` for two tickers simultaneously).
 
+**Persistent memory**: the agent maintains a sliding-window conversation history within each session — it remembers earlier exchanges and can reference them without re-fetching data.
+
 ```
-MINI-BB> ? which of MSFT, GOOGL, META has the best FCF yield? <GO>
+MINI-BB> ? what is AAPL's revenue trend? <GO>
+MINI-BB> ? how does that compare to MSFT? <GO>    ← agent references AAPL context
+MINI-BB> CLEAR HISTORY <GO>                        ← wipe memory for a fresh start
 ```
+
+| `.env` variable | Default | Effect |
+|---|---|---|
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Model used by the `?` agent |
+| `AGENT_MEMORY_TURNS` | `20` | Number of past messages kept in the sliding window |
 
 ---
 
@@ -334,7 +434,8 @@ MINI-BB> ? which of MSFT, GOOGL, META has the best FCF yield? <GO>
 ```
 Data        openbb, httpx, pydantic, diskcache
 CLI         typer, rich, plotext, prompt-toolkit
-LLM         anthropic (claude-sonnet-4-6)
+Web         fastapi, uvicorn
+LLM         anthropic (claude-sonnet-4-6 / claude-haiku-4-5 for RPT insights)
 Infra       uv, python-dotenv, pytest
 ```
 

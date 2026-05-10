@@ -171,46 +171,75 @@ def dispatch(raw: str) -> bool:
 def _parse_function_kwargs(cmd: str, args: list[str]) -> dict:
     """
     Extract optional ticker and numeric params from remaining tokens.
+
     E.g. "FA AAPL US Equity" → {ticker: "AAPL US Equity"}
          "GP --days 90"      → {days: 90}
          "DES"               → {}  (uses session)
+
+    FX functions (FXHV, FXCA, FXIP, WCR, FRD) accept positional currency tokens
+    which are passed through as a joined "ticker" string for their own parsers:
+         "FXHV EUR USD"      → {ticker: "EUR USD"}
+         "FXCA USD JPY 1000" → {ticker: "USD JPY 1000"}
+         "FXIP em EUR"       → {ticker: "em EUR"}
+         "WCR g10 JPY 1m"    → {ticker: "g10 JPY 1m"}
+         "FRD EURUSD"        → {ticker: "EURUSD"}   (existing behaviour)
     """
     kwargs: dict = {}
 
-    # Check if first arg looks like a ticker (word + optional exchange code)
-    if args and not args[0].startswith("-"):
-        # Could be ticker tokens: consume until we hit a flag or end
-        ticker_parts = []
-        remaining = []
+    # Commands whose positional args are NOT Bloomberg security tickers but
+    # currency codes / group keywords.  Pass them straight through as `ticker`.
+    _FX_POSITIONAL_CMDS = {"FXHV", "FXCA", "FXIP", "WCR", "FRD"}
+
+    if cmd.upper() in _FX_POSITIONAL_CMDS:
+        # Split into positional tokens (before any --flag) and flag args
+        positional = []
+        remaining  = []
         for i, token in enumerate(args):
             if token.startswith("-"):
                 remaining = args[i:]
                 break
-            ticker_parts.append(token)
+            positional.append(token)
         else:
             remaining = []
 
-        if ticker_parts:
-            candidate = " ".join(ticker_parts)
-            try:
-                parse_ticker(candidate)
-                kwargs["ticker"] = candidate
-                args = remaining
-            except TickerError:
-                args = ticker_parts + remaining  # put back, not a ticker
+        if positional:
+            kwargs["ticker"] = " ".join(positional)
+        args = remaining
 
-    # Parse --days / --years / FX string flags
+    else:
+        # Standard equity-ticker detection for all other commands
+        if args and not args[0].startswith("-"):
+            ticker_parts = []
+            remaining = []
+            for i, token in enumerate(args):
+                if token.startswith("-"):
+                    remaining = args[i:]
+                    break
+                ticker_parts.append(token)
+            else:
+                remaining = []
+
+            if ticker_parts:
+                candidate = " ".join(ticker_parts)
+                try:
+                    parse_ticker(candidate)
+                    kwargs["ticker"] = candidate
+                    args = remaining
+                except TickerError:
+                    args = ticker_parts + remaining  # put back, not a ticker
+
+    # Parse --days / --years / --amount / FX string flags
     _STR_FLAGS = {
-        "base":    "base",
-        "quote":   "quote",
-        "pair":    "pair",
-        "from":    "from_ccy",
-        "from-ccy":"from_ccy",
-        "to":      "to_ccy",
-        "to-ccy":  "to_ccy",
-        "group":   "group",
-        "sort-by": "sort_by",
-        "sortby":  "sort_by",
+        "base":     "base",
+        "quote":    "quote",
+        "pair":     "pair",
+        "from":     "from_ccy",
+        "from-ccy": "from_ccy",
+        "to":       "to_ccy",
+        "to-ccy":   "to_ccy",
+        "group":    "group",
+        "sort-by":  "sort_by",
+        "sortby":   "sort_by",
     }
     i = 0
     while i < len(args):
@@ -260,11 +289,11 @@ def _render_help() -> None:
         ("COMP <GO>",     "Comparable companies side-by-side",         "COMP <GO>"),
         ("RPT <GO>",      "Full equity report + Markdown file",        "RPT <GO>"),
         ("RV <GO>",       "Relative value vs. peers",                  "RV <GO>"),
-        ("FXIP <GO>",     "FX spot monitor: G10/EM vs USD",            "FXIP --group em <GO>"),
-        ("FXCA <GO>",     "FX calculator: convert between currencies", "FXCA --from USD --to JPY --amount 1000 <GO>"),
-        ("FXHV <GO>",     "FX historical volatility (multi-window)",   "FXHV --base EUR --quote USD <GO>"),
-        ("FRD <GO>",      "FX forward rate curve (CIP-implied)",       "FRD --base EUR --quote USD <GO>"),
-        ("WCR <GO>",      "World currency ranker by performance",      "WCR --group g10 --sort-by 1m <GO>"),
+        ("FXIP [grp] [ccy] <GO>",  "FX spot monitor: G10/EM vs quote",        "FXIP em EUR <GO>"),
+        ("FXCA [ccy ccy] [amt] <GO>", "FX calculator: convert amount",        "FXCA USD JPY 1000 <GO>"),
+        ("FXHV [ccy ccy] <GO>",    "FX historical volatility (multi-window)", "FXHV EUR USD <GO>"),
+        ("FRD [ccy ccy] <GO>",     "FX forward rate curve (CIP-implied)",     "FRD USD EUR <GO>"),
+        ("WCR [grp] [ccy] [hz] <GO>", "World currency ranker by performance", "WCR em EUR 1m <GO>"),
         ("? <query>",          "Ask the AI analyst a question",        "? compare NVDA AMD <GO>"),
         ("CLEAR HISTORY <GO>", "Wipe AI analyst conversation memory",  "CLEAR HISTORY <GO>"),
         ("HELP <GO>",          "Show this help screen",                "HELP <GO>"),
