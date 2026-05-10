@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     fmp_base_url: str = "https://financialmodelingprep.com/stable"
     cache_ttl_seconds: int = 86400  # 24 hours
+    agent_memory_turns: int = 20    # sliding-window size; set AGENT_MEMORY_TURNS in .env
 
 
 @lru_cache(maxsize=1)

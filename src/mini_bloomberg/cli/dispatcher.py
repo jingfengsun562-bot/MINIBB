@@ -117,6 +117,13 @@ def dispatch(raw: str) -> bool:
         _render_help()
         return True
 
+    # ── Clear agent memory ────────────────────────────────────────────────────
+    if upper in ("CLEAR HISTORY", "CLEAR"):
+        from mini_bloomberg.agents.orchestrator import clear_history
+        clear_history()
+        console.print(f"[{DIM}]Conversation history cleared.[/{DIM}]")
+        return True
+
     # ── Agent mode: "? <query>" ───────────────────────────────────────────────
     if line.startswith("?"):
         query = line[1:].strip()
@@ -258,9 +265,10 @@ def _render_help() -> None:
         ("FXHV <GO>",     "FX historical volatility (multi-window)",   "FXHV --base EUR --quote USD <GO>"),
         ("FRD <GO>",      "FX forward rate curve (CIP-implied)",       "FRD --base EUR --quote USD <GO>"),
         ("WCR <GO>",      "World currency ranker by performance",      "WCR --group g10 --sort-by 1m <GO>"),
-        ("? <query>",     "Ask the AI analyst a question",             "? compare NVDA AMD <GO>"),
-        ("HELP <GO>",     "Show this help screen",                     "HELP <GO>"),
-        ("QUIT <GO>",     "Exit Mini-Bloomberg",                       "QUIT <GO>"),
+        ("? <query>",          "Ask the AI analyst a question",        "? compare NVDA AMD <GO>"),
+        ("CLEAR HISTORY <GO>", "Wipe AI analyst conversation memory",  "CLEAR HISTORY <GO>"),
+        ("HELP <GO>",          "Show this help screen",                "HELP <GO>"),
+        ("QUIT <GO>",          "Exit Mini-Bloomberg",                  "QUIT <GO>"),
     ]
     for row in rows:
         t.add_row(*row)

@@ -20,16 +20,17 @@ from rich.text import Text
 from mini_bloomberg.agents.prompts import ANALYST_SYSTEM_PROMPT
 from mini_bloomberg.agents.tools import ALL_TOOLS, FUNCTIONS_BY_NAME
 from mini_bloomberg.config import get_settings
+from mini_bloomberg.core.llm import _get_client
 from mini_bloomberg.render.cli_renderer import console, DIM, ORANGE, HEADER
 
-_client: anthropic.Anthropic | None = None
+# Persistent conversation history — survives across run_agent() calls within one process.
+# Stores clean user/assistant pairs only (no intermediate tool-call turns).
+_conversation: list[dict] = []
 
 
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=get_settings().anthropic_api_key)
-    return _client
+def clear_history() -> None:
+    """Wipe the in-session conversation history."""
+    _conversation.clear()
 
 
 # ── Tool execution ─────────────────────────────────────────────────────────────
@@ -137,29 +138,37 @@ def run_agent(query: str) -> None:
     """
     Run the tool-use loop for a user query. Prints streaming output to terminal.
     Exits when Claude returns end_turn with no more tool calls.
+    Maintains a sliding-window conversation history across calls (AGENT_MEMORY_TURNS).
     """
     settings = get_settings()
-    model = settings.claude_model
+    model  = settings.claude_model
     client = _get_client()
+    max_n  = settings.agent_memory_turns
 
-    messages: list[dict] = [{"role": "user", "content": query}]
+    # Build windowed context from persistent history
+    window = _conversation[-max_n:] if len(_conversation) > max_n else list(_conversation)
+    # Ensure window starts on a user turn to keep the API message alternation valid
+    while window and window[0]["role"] != "user":
+        window = window[1:]
+
+    # Working message list for this call: history context + new query
+    messages: list[dict] = window + [{"role": "user", "content": query}]
 
     console.print()
     console.print(
         f"[{DIM}]AI Analyst thinking… (model: {model})[/{DIM}]"
     )
 
+    full_text = ""
     max_rounds = 8  # guard against infinite loops
     for round_num in range(max_rounds):
 
-        # Show spinner while tools run (not during streaming)
         full_text, tool_use_blocks, final_message = _stream_response(client, model, messages)
 
         # Append assistant turn
         messages.append({"role": "assistant", "content": final_message.content})
 
         if final_message.stop_reason == "end_turn" or not tool_use_blocks:
-            # Done — final answer already printed via streaming
             if not full_text.strip():
                 console.print(f"[{DIM}](No text response)[/{DIM}]")
             break
@@ -173,5 +182,9 @@ def run_agent(query: str) -> None:
 
     else:
         console.print(f"[dim]Agent reached max rounds ({max_rounds}) — stopping.[/dim]")
+
+    # Persist clean exchange (query + final text only — no intermediate tool turns)
+    _conversation.append({"role": "user",      "content": query})
+    _conversation.append({"role": "assistant", "content": full_text})
 
     console.print()

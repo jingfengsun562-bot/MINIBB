@@ -381,22 +381,74 @@ _CSS = """
     color: rgba(255,255,255,0.35);
   }
   .footer-bar .pgnum { color: #c9a227; font-weight: 700; }
-  .xlsx-btn {
-    background: transparent;
-    border: 1px solid #c9a227;
+  /* ── Insights section ── */
+  .insights-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 28px;
+    margin-top: 14px;
+  }
+  .insights-left { display: flex; flex-direction: column; gap: 22px; }
+  .insights-block-title {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: #8492a6; margin-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;
+  }
+  .insights-text { font-size: 13px; line-height: 1.75; color: #1e293b; }
+  .insights-text p { margin: 0 0 10px 0; }
+  .insights-right { display: flex; flex-direction: column; gap: 22px; }
+  .ins-anl-rating { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .ins-anl-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    padding: 3px 10px; border-radius: 3px; color: #fff; text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .ins-anl-target { font-size: 22px; font-weight: 700; color: #16305a; }
+  .ins-anl-upside { font-size: 13px; font-weight: 600; }
+  .ins-anl-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ins-anl-table td { padding: 4px 6px; border-bottom: 1px solid #e8ecf2; }
+  .ins-anl-table td:last-child { text-align: right; font-weight: 600; }
+  .trading-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trading-table td { padding: 5px 6px; border-bottom: 1px solid #e8ecf2; }
+  .trading-table td:last-child { text-align: right; font-weight: 600; color: #16305a; }
+  .xlsx-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    background: #f0f4ff;
+    border: 1px solid #d0d9f0;
+    border-left: 4px solid #16305a;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-top: 12px;
+  }
+  .xlsx-callout-body { flex: 1; }
+  .xlsx-callout-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #16305a;
+    margin-bottom: 6px;
+  }
+  .xlsx-callout-sub {
+    font-size: 12px;
+    color: #4b5563;
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .xlsx-callout-btn {
+    background: #16305a;
+    border: none;
     color: #c9a227;
-    padding: 5px 14px;
+    padding: 8px 18px;
     font-family: 'Inter', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.5px;
     cursor: pointer;
-    border-radius: 3px;
-    align-self: center;
-    text-decoration: none;
+    border-radius: 4px;
     white-space: nowrap;
   }
-  .xlsx-btn:hover { background: #c9a227; color: #0a1628; }
+  .xlsx-callout-btn:hover { background: #c9a227; color: #0a1628; }
 """
 
 
@@ -715,155 +767,6 @@ def _td_row(cells: list, cls: str = "") -> str:
     return f"<tr{row_cls}>{tds}</tr>"
 
 
-# ── Statement table builder ────────────────────────────────────────────────────
-
-def _build_table(specs: list, rows_raw: list, currency: str,
-                 revenue_by_year: dict | None = None) -> str:
-    """
-    Build a financial statement HTML table from a list of row specs.
-
-    Spec types:
-      ("section",    "LABEL")                         → navy divider row
-      ("data",       "Label", key, fmt)               → normal data row
-      ("data_accent","Label", key, fmt)               → accented data row
-      ("pct",        "Label", num_key, denom_key)     → % row, both keys in same statement
-      ("pct_ext",    "Label", num_key)                → % row, denom from revenue_by_year dict
-
-    fmt values: "money" (currency-prefixed), "price" (_p format), "count" (no currency prefix)
-    """
-    if not rows_raw:
-        return "<p style='color:#8492a6;font-size:12px'>No data available.</p>"
-
-    years  = [r.get("fiscal_year") or "" for r in rows_raw]
-    n_cols = len(years) + 1
-    th     = _th("", *years)
-
-    body = []
-    for spec in specs:
-        kind = spec[0]
-
-        if kind == "section":
-            body.append(
-                f'<tr class="row-section">'
-                f'<td colspan="{n_cols}">{_e(spec[1])}</td>'
-                f'</tr>'
-            )
-
-        elif kind in ("data", "data_accent"):
-            label, key, fmt = spec[1], spec[2], spec[3]
-            if fmt == "price":
-                vals = [_p(r.get(key), currency) for r in rows_raw]
-            elif fmt == "count":
-                vals = [_n(r.get(key)) for r in rows_raw]
-            else:
-                vals = [_n(r.get(key), currency) for r in rows_raw]
-            cls = "row-accent" if kind == "data_accent" else ""
-            body.append(_td_row([label] + vals, cls))
-
-        elif kind == "pct":
-            label, num_key, denom_key = spec[1], spec[2], spec[3]
-            vals = []
-            for r in rows_raw:
-                num   = r.get(num_key)
-                denom = r.get(denom_key)
-                vals.append(_pct(num / denom) if num is not None and denom else "N/A")
-            body.append(_td_row([label] + vals, "row-pct"))
-
-        elif kind == "pct_ext":
-            label, num_key = spec[1], spec[2]
-            vals = []
-            for r in rows_raw:
-                num   = r.get(num_key)
-                yr    = r.get("fiscal_year")
-                denom = (revenue_by_year or {}).get(yr)
-                vals.append(_pct(num / denom) if num is not None and denom else "N/A")
-            body.append(_td_row([label] + vals, "row-pct"))
-
-    return f"<table>{th}<tbody>{''.join(body)}</tbody></table>"
-
-
-# ── Statement specs ────────────────────────────────────────────────────────────
-
-_IS_SPECS = [
-    ("section",    "Revenue"),
-    ("data",       "Total Revenue",             "revenue",                       "money"),
-    ("data",       "Cost of Revenue",           "cost_of_revenue",               "money"),
-    ("section",    "Gross Profit"),
-    ("data",       "Gross Profit",              "gross_profit",                  "money"),
-    ("pct",        "  Gross Margin %",          "gross_profit",    "revenue"),
-    ("section",    "Operating Expenses"),
-    ("data",       "R&D Expenses",              "rd_expenses",                   "money"),
-    ("data",       "SG&A Expenses",             "sga_expenses",                  "money"),
-    ("data",       "Total Operating Expenses",  "operating_expenses",            "money"),
-    ("section",    "Operating Income"),
-    ("data_accent","Operating Income",          "operating_income",              "money"),
-    ("pct",        "  Operating Margin %",      "operating_income", "revenue"),
-    ("data",       "EBIT",                      "ebit",                          "money"),
-    ("data_accent","EBITDA",                    "ebitda",                        "money"),
-    ("pct",        "  EBITDA Margin %",         "ebitda",          "revenue"),
-    ("section",    "Below the Line"),
-    ("data",       "D&A",                       "depreciation_and_amortization", "money"),
-    ("data",       "Interest Expense",          "interest_expense",              "money"),
-    ("data",       "Income Tax Expense",        "income_tax_expense",            "money"),
-    ("section",    "Net Income & EPS"),
-    ("data_accent","Net Income",                "net_income",                    "money"),
-    ("pct",        "  Net Margin %",            "net_income",      "revenue"),
-    ("data",       "EPS (Basic)",               "eps",                           "price"),
-    ("data",       "EPS (Diluted)",             "eps_diluted",                   "price"),
-    ("data",       "Wtd Avg Shares",            "weighted_avg_shares",           "count"),
-    ("data",       "Wtd Avg Shares (Dil.)",     "weighted_avg_shares_diluted",   "count"),
-]
-
-_BS_SPECS = [
-    ("section",    "Current Assets"),
-    ("data",       "Cash & Equivalents",        "cash_and_equivalents",          "money"),
-    ("data",       "Short-term Investments",    "short_term_investments",        "money"),
-    ("data",       "Net Receivables",           "net_receivables",               "money"),
-    ("data",       "Inventory",                 "inventory",                     "money"),
-    ("data_accent","Total Current Assets",      "total_current_assets",          "money"),
-    ("section",    "Non-Current Assets"),
-    ("data",       "Goodwill",                  "goodwill",                      "money"),
-    ("data",       "Total Non-Current Assets",  "total_non_current_assets",      "money"),
-    ("data_accent","Total Assets",              "total_assets",                  "money"),
-    ("section",    "Current Liabilities"),
-    ("data",       "Accounts Payable",          "accounts_payable",              "money"),
-    ("data",       "Short-term Debt",           "short_term_debt",               "money"),
-    ("data_accent","Total Current Liabilities", "total_current_liabilities",     "money"),
-    ("section",    "Non-Current Liabilities"),
-    ("data",       "Long-term Debt",            "long_term_debt",                "money"),
-    ("data",       "Total Non-Current Liab.",   "total_non_current_liabilities", "money"),
-    ("data_accent","Total Liabilities",         "total_liabilities",             "money"),
-    ("section",    "Equity"),
-    ("data",       "Retained Earnings",         "retained_earnings",             "money"),
-    ("data",       "Total Stockholders' Eq.",   "total_stockholders_equity",     "money"),
-    ("data_accent","Total Equity",              "total_equity",                  "money"),
-    ("data",       "Total Debt",                "total_debt",                    "money"),
-    ("data_accent","Net Debt",                  "net_debt",                      "money"),
-]
-
-_CF_SPECS = [
-    ("section",    "Operating Activities"),
-    ("data",       "Net Income",                "net_income",                    "money"),
-    ("data",       "D&A",                       "depreciation_and_amortization", "money"),
-    ("data",       "Stock-Based Comp.",         "stock_based_compensation",      "money"),
-    ("data",       "Change in Working Cap.",    "change_in_working_capital",     "money"),
-    ("data_accent","Operating Cash Flow",       "operating_cash_flow",           "money"),
-    ("pct_ext",    "  OCF Margin %",            "operating_cash_flow"),
-    ("section",    "Investing Activities"),
-    ("data",       "Capital Expenditure",       "capital_expenditure",           "money"),
-    ("pct_ext",    "  CapEx % of Revenue",      "capital_expenditure"),
-    ("data",       "Net Investing Activities",  "net_investing_activities",      "money"),
-    ("section",    "Financing Activities"),
-    ("data",       "Dividends Paid",            "dividends_paid",                "money"),
-    ("data",       "Stock Repurchased",         "common_stock_repurchased",      "money"),
-    ("data",       "Net Financing Activities",  "net_financing_activities",      "money"),
-    ("section",    "Free Cash Flow"),
-    ("data_accent","Free Cash Flow",            "free_cash_flow",                "money"),
-    ("pct_ext",    "  FCF Margin %",            "free_cash_flow"),
-    ("data",       "Net Change in Cash",        "net_change_in_cash",            "money"),
-]
-
-
 # ── Main render function ───────────────────────────────────────────────────────
 
 def render_report_html(result: dict) -> Path:
@@ -883,9 +786,6 @@ def render_report_html(result: dict) -> Path:
 
     currency = fin.get("currency") or prof.get("currency") or ""
     name     = prof.get("name") or sym
-    income   = fin.get("income_statements") or []
-    balance  = fin.get("balance_sheets") or []
-    cashflow = fin.get("cash_flows") or []
     peers    = comp.get("peers") or []
 
     # ── Header derived values ──────────────────────────────────────────────────
@@ -917,16 +817,6 @@ def render_report_html(result: dict) -> Path:
     kpi_mktcap   = _n(val.get("market_cap"), currency)
 
     kpi_fcfy_cls = "pos" if (val.get("fcf_yield") or 0) > 0 else ""
-
-    # ── Financial statement tables ─────────────────────────────────────────────
-    revenue_by_year = {
-        r.get("fiscal_year"): r.get("revenue")
-        for r in income
-        if r.get("revenue")
-    }
-    income_table  = _build_table(_IS_SPECS, income,   currency)
-    balance_table = _build_table(_BS_SPECS, balance,  currency)
-    cf_table      = _build_table(_CF_SPECS, cashflow, currency, revenue_by_year)
 
     # ── Ratios table ───────────────────────────────────────────────────────────
     def _ratio_table() -> str:
@@ -976,36 +866,6 @@ def render_report_html(result: dict) -> Path:
         _val_card("FCF Yield",        _pct(val.get("fcf_yield")), fcfy_cls)
     )
 
-    # ── Analyst consensus ──────────────────────────────────────────────────────
-    n_buy  = (anl.get("strong_buy") or 0) + (anl.get("buy") or 0)
-    n_hold = anl.get("hold") or 0
-    n_sell = (anl.get("sell") or 0) + (anl.get("strong_sell") or 0)
-    n_total = n_buy + n_hold + n_sell or 1  # avoid div-by-zero
-
-    def _bar(label: str, count: int, cls: str) -> str:
-        pct = round(count / n_total * 100)
-        return (
-            f'<div class="bar-row">'
-            f'<div class="bar-label"><span>{label}</span><span>{count}</span></div>'
-            f'<div class="bar-track"><div class="bar-fill {cls}" style="width:{pct}%"></div></div>'
-            f'</div>'
-        )
-
-    rating_display = rating_raw or "N/A"
-    rating_style = f"color:{rating_color};font-weight:700"
-    anl_table_rows = [
-        f'<tr><td>Consensus Rating</td><td style="text-align:right;{rating_style}">{_e(rating_display)}</td></tr>',
-        f'<tr><td># Analysts</td><td style="text-align:right">{anl.get("num_analysts") or "N/A"}</td></tr>',
-        f'<tr><td>Price Target (Consensus)</td><td style="text-align:right">{_p(pt.get("target_consensus"), currency)}</td></tr>',
-        f'<tr><td>Price Target High</td><td style="text-align:right">{_p(pt.get("target_high"), currency)}</td></tr>',
-        f'<tr><td>Price Target Low</td><td style="text-align:right">{_p(pt.get("target_low"), currency)}</td></tr>',
-    ]
-    anl_bars = (
-        _bar("Buy / Strong Buy",   n_buy,  "buy") +
-        _bar("Hold",               n_hold, "hold") +
-        _bar("Sell / Strong Sell", n_sell, "sell")
-    ) if (n_buy + n_hold + n_sell) > 0 else "<p style='color:#8492a6;font-size:12px'>No breakdown available.</p>"
-
     # ── Peer comparison table ──────────────────────────────────────────────────
     def _peer_table() -> str:
         if not peers:
@@ -1048,13 +908,33 @@ def render_report_html(result: dict) -> Path:
             ]))
         return f"<table>{th}<tbody>{''.join(rows)}</tbody></table>"
 
+    # ── Trading metrics ────────────────────────────────────────────────────────
+    tm      = d.get("trading_metrics") or {}
+    high_52 = tm.get("high_52w")
+    low_52  = tm.get("low_52w")
+    range_52w_str = f"{_p(low_52, currency)} – {_p(high_52, currency)}" if (high_52 and low_52) else "N/A"
+    avg_vol   = tm.get("avg_daily_volume")
+    avg_vol_str = f"{avg_vol:,.0f}" if avg_vol else "N/A"
+    avg_val   = tm.get("avg_daily_value")
+    avg_val_str = _n(avg_val, currency) if avg_val else "N/A"
+    float_shares = prof.get("shares_float")
+    float_pct    = (float_shares / prof.get("shares_outstanding") * 100
+                    if float_shares and prof.get("shares_outstanding") else None)
+    float_pct_str = f"{float_pct:.0f}%" if float_pct else "N/A"
+    latest_ratio = rlist[0] if rlist else {}
+
+    # ── Insights text ──────────────────────────────────────────────────────────
+    ins = d.get("insights") or {}
+    what_happened_html = _e(ins.get("what_happened") or "No recent news data available.")
+    our_thoughts_raw   = ins.get("our_thoughts") or "<p>Analysis not available.</p>"
+
     # ── Assemble HTML ──────────────────────────────────────────────────────────
     subtitle_parts = [s for s in [sector, exchange, currency] if s]
     subtitle = " &nbsp;·&nbsp; ".join(_e(p) for p in subtitle_parts)
 
     rating_pill_html = (
         f'<span class="rating-pill" style="background:{rating_color};border:1px solid {rating_color}">'
-        f'{_e(rating_display)}'
+        f'{_e(rating_raw)}'
         f'</span>'
     ) if rating_raw else ""
 
@@ -1097,7 +977,6 @@ def render_report_html(result: dict) -> Path:
   <div class="header-top">
     <div class="firm-name">Mini BB Research</div>
     <div class="report-type">Equity Research &nbsp;·&nbsp; {_e(sector or "Equity")}<br>{_e(date_display)} &nbsp;·&nbsp; Full Report</div>
-    <button class="xlsx-btn" onclick="downloadXLSX()">&#8675; Download XLSX</button>
   </div>
   <div class="header-main">
     <div>
@@ -1147,48 +1026,91 @@ def render_report_html(result: dict) -> Path:
     </div>
   </div>
 
-  <!-- §2 Income Statement -->
+  <!-- §2 Insights -->
   <div class="section">
-    {_section(2, "Income Statement", currency)}
-    {income_table}
-  </div>
-
-  <!-- §3 Balance Sheet -->
-  <div class="section">
-    {_section(3, "Balance Sheet", currency)}
-    {balance_table}
-  </div>
-
-  <!-- §4 Cash Flow -->
-  <div class="section">
-    {_section(4, "Cash Flow", currency)}
-    {cf_table}
-  </div>
-
-  <!-- §5 Financial Ratios -->
-  <div class="section">
-    {_section(5, "Financial Ratios")}
-    {_ratio_table()}
-  </div>
-
-  <!-- §6 Valuation Multiples -->
-  <div class="section">
-    {_section(6, "Valuation Multiples", f"As of {date_display}")}
-    <div class="val-grid">{val_cards_html}</div>
-  </div>
-
-  <!-- §7 Analyst Consensus -->
-  <div class="section">
-    {_section(7, "Analyst Consensus")}
-    <div class="consensus-grid">
-      <table><tbody>{''.join(anl_table_rows)}</tbody></table>
-      <div>{anl_bars}</div>
+    {_section(2, "Insights", "Market Intelligence · Analyst View")}
+    <div class="insights-grid">
+      <!-- LEFT: What happened + Our thoughts -->
+      <div class="insights-left">
+        <div>
+          <div class="insights-block-title">What happened?</div>
+          <div class="insights-text"><p>{what_happened_html}</p></div>
+        </div>
+        <div>
+          <div class="insights-block-title">Our thoughts</div>
+          <div class="insights-text">{our_thoughts_raw}</div>
+        </div>
+      </div>
+      <!-- RIGHT: Compact analyst consensus + Trading data -->
+      <div class="insights-right">
+        <div>
+          <div class="insights-block-title">Analyst Consensus</div>
+          <div class="ins-anl-rating">
+            <span class="ins-anl-pill" style="background:{rating_color}">{_e(rating_raw) if rating_raw else "N/A"}</span>
+            <span class="ins-anl-target">{_p(target, currency)}</span>
+            <span class="ins-anl-upside {'pos' if (target and cur_price and target > cur_price) else 'neg' if (target and cur_price) else ''}">{
+              f'+{(target - cur_price) / cur_price * 100:.1f}%' if target and cur_price and target > cur_price
+              else f'{(target - cur_price) / cur_price * 100:.1f}%' if target and cur_price
+              else ''
+            }</span>
+          </div>
+          <table class="ins-anl-table">
+            <tr><td># Analysts</td><td>{anl.get("num_analysts") or "N/A"}</td></tr>
+            <tr><td>Target High</td><td>{_p(pt.get("target_high"), currency)}</td></tr>
+            <tr><td>Target Low</td><td>{_p(pt.get("target_low"), currency)}</td></tr>
+            <tr><td>Target Mean</td><td>{_p(pt.get("target_consensus"), currency)}</td></tr>
+            <tr><td>Current Price</td><td>{_p(cur_price, currency)}</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="insights-block-title">Trading Data &amp; Key Metrics</div>
+          <table class="trading-table">
+            <tr><td>52-Wk Range</td><td>{range_52w_str}</td></tr>
+            <tr><td>Market Cap</td><td>{_n(val.get("market_cap"), currency)}</td></tr>
+            <tr><td>Shares O/S</td><td>{_n(prof.get("shares_outstanding"))}</td></tr>
+            <tr><td>Free Float</td><td>{float_pct_str}</td></tr>
+            <tr><td>Avg Daily Vol</td><td>{avg_vol_str}</td></tr>
+            <tr><td>Avg Daily Value</td><td>{avg_val_str}</td></tr>
+            <tr><td>Beta</td><td>{f"{prof['beta']:.2f}" if prof.get("beta") is not None else "N/A"}</td></tr>
+            <tr><td>Div Yield</td><td>{_pct_raw(val.get("dividend_yield"))}</td></tr>
+            <tr><td>P / BV</td><td>{_x(val.get("pb_ratio"))}</td></tr>
+            <tr><td>Net Debt / EBITDA</td><td>{_x(latest_ratio.get("net_debt_to_ebitda"))}</td></tr>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- §8 Peer Comparison -->
+  <!-- §3 Financial Statements -->
   <div class="section">
-    {_section(8, "Peer Comparison")}
+    {_section(3, "Financial Statements", "Income Statement · Balance Sheet · Cash Flow")}
+    <div class="xlsx-callout">
+      <div class="xlsx-callout-body">
+        <div class="xlsx-callout-title">Quarterly &amp; Annual Financials</div>
+        <div class="xlsx-callout-sub">
+          Full IS / BS / CF breakdowns — Q1 through Q4 plus annual totals for each fiscal year,
+          with margin rows and section groupings. All figures in millions except per-share data.
+        </div>
+        <button class="xlsx-callout-btn" onclick="downloadXLSX()">&#8675;&nbsp; Download Financial Reports in XLSX</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- §4 Financial Ratios -->
+  <div class="section">
+    {_section(4, "Financial Ratios")}
+    {_ratio_table()}
+  </div>
+
+  <!-- §5 Valuation Multiples -->
+  <div class="section">
+    {_section(5, "Valuation Multiples", f"As of {date_display}")}
+    <div class="val-grid">{val_cards_html}</div>
+  </div>
+
+  <!-- §6 Peer Comparison -->
+  <div class="section">
+    {_section(6, "Peer Comparison")}
     {_peer_table()}
   </div>
 

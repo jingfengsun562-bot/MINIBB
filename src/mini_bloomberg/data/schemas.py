@@ -328,6 +328,13 @@ class ValuationMultiples(BaseModel):
     dividend_yield: Optional[float] = None
 
 
+class InsightsData(BaseModel):
+    """AI-generated narrative for the Insights section of the HTML report."""
+    what_happened: str = ""
+    our_thoughts: str = ""        # 2–3 prose paragraphs as HTML <p> tags
+    news_headlines: list[str] = []
+
+
 class EquityReport(BaseModel):
     """Full RPT output — all layers assembled into one object."""
     symbol: str
@@ -339,6 +346,8 @@ class EquityReport(BaseModel):
     analyst: Optional[AnalystRatings] = None
     comparables: Optional[Comparables] = None
     quarterly: Optional["QuarterlyFinancials"] = None
+    insights: Optional[InsightsData] = None
+    trading_metrics: dict = {}    # 52w high/low, avg_daily_volume, avg_daily_value
 
 
 # ─── FX ───────────────────────────────────────────────────────────────────────
