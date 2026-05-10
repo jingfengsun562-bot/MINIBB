@@ -5,10 +5,13 @@ Returns the Path of the written file.
 """
 
 import html as _html
+import json
 from pathlib import Path
 from typing import Optional
 
 _REPORTS_DIR = Path(__file__).parent.parent.parent.parent / "reports"
+_XLSX_JS_PATH = Path(__file__).parent / "_xlsx_js_style.min.js"
+_XLSX_JS_INLINE = _XLSX_JS_PATH.read_text(encoding="utf-8") if _XLSX_JS_PATH.exists() else ""
 
 _CURRENCY_SYMBOLS = {
     "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥",
@@ -378,7 +381,315 @@ _CSS = """
     color: rgba(255,255,255,0.35);
   }
   .footer-bar .pgnum { color: #c9a227; font-weight: 700; }
+  .xlsx-btn {
+    background: transparent;
+    border: 1px solid #c9a227;
+    color: #c9a227;
+    padding: 5px 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    border-radius: 3px;
+    align-self: center;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .xlsx-btn:hover { background: #c9a227; color: #0a1628; }
 """
+
+
+# ── XLSX payload builder ───────────────────────────────────────────────────────
+
+from mini_bloomberg.data.equity_quarterly import _IS_DISPLAY
+
+
+def _build_xlsx_payload(d: dict) -> str:
+    """
+    Build the JSON string embedded in the HTML for the SheetJS XLSX download.
+    Layout: 4 fiscal years × (Q1|Q2|Q3|Q4|Annual) = 20 data columns per sheet.
+    """
+    sym       = d.get("symbol", "")
+    fin       = d.get("financials") or {}
+    quarterly = d.get("quarterly") or {}
+
+    # ── Determine the 4 fiscal years to show (oldest → newest) ────────────────
+    ann_is = fin.get("income_statements") or []
+    years: list[str] = sorted({r.get("fiscal_year", "") for r in ann_is if r.get("fiscal_year")})
+    years = years[-4:]  # keep most recent 4
+
+    # ── Annual lookup: {sheet: {year: {display_name: value}}} ─────────────────
+    def _ann_map(rows, name_map: dict[str, str]) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for r in rows:
+            fy = r.get("fiscal_year", "")
+            if not fy:
+                continue
+            out[fy] = {disp: r.get(field) for field, disp in name_map.items()}
+        return out
+
+    # field-name → display-name maps matching the annual Pydantic schema fields
+    _ANN_IS_MAP = {
+        "revenue":                       "Total Revenue",
+        "cost_of_revenue":               "Cost of Revenue",
+        "gross_profit":                  "Gross Profit",
+        "rd_expenses":                   "R&D Expenses",
+        "sga_expenses":                  "SG&A Expenses",
+        "operating_expenses":            "Total Operating Expenses",
+        "operating_income":              "Operating Income",
+        "ebitda":                        "EBITDA",
+        "ebit":                          "EBIT",
+        "net_income":                    "Net Income",
+        "eps":                           "EPS (Basic)",
+        "eps_diluted":                   "EPS (Diluted)",
+        "weighted_avg_shares":           "Shares Outstanding (Basic)",
+        "weighted_avg_shares_diluted":   "Shares Outstanding (Diluted)",
+        "depreciation_and_amortization": "D&A",
+        "income_tax_expense":            "Income Tax Expense",
+    }
+    _ANN_BS_MAP = {
+        "cash_and_equivalents":          "Cash & Equivalents",
+        "short_term_investments":        "ST Investments",
+        "net_receivables":               "Accounts Receivable",
+        "inventory":                     "Inventory",
+        "total_current_assets":          "Total Current Assets",
+        "total_assets":                  "Total Assets",
+        "accounts_payable":              "Accounts Payable",
+        "short_term_debt":               "ST Debt",
+        "total_current_liabilities":     "Total Current Liabilities",
+        "long_term_debt":                "Long-Term Debt",
+        "total_non_current_liabilities": "Total Non-Current Liabilities",
+        "total_liabilities":             "Total Liabilities",
+        "total_stockholders_equity":     "Total Stockholders Equity",
+        "retained_earnings":             "Retained Earnings",
+        "total_debt":                    "Total Debt",
+        "net_debt":                      "Net Debt",
+        "goodwill":                      "Goodwill & Intangibles",
+    }
+    _ANN_CF_MAP = {
+        "net_income":                "Net Income",
+        "depreciation_and_amortization": "D&A",
+        "stock_based_compensation":  "Stock-Based Compensation",
+        "change_in_working_capital": "Change in Working Capital",
+        "operating_cash_flow":       "Cash Flow from Operations",
+        "capital_expenditure":       "Capital Expenditures",
+        "free_cash_flow":            "Free Cash Flow",
+        "net_investing_activities":  "Cash Flow from Investing",
+        "dividends_paid":            "Dividends Paid",
+        "common_stock_repurchased":  "Share Buybacks",
+        "net_financing_activities":  "Cash Flow from Financing",
+        "net_change_in_cash":        "Net Change in Cash",
+    }
+
+    annual_is  = _ann_map(fin.get("income_statements") or [], _ANN_IS_MAP)
+    annual_bs  = _ann_map(fin.get("balance_sheets")    or [], _ANN_BS_MAP)
+    annual_cf  = _ann_map(fin.get("cash_flows")        or [], _ANN_CF_MAP)
+
+    # ── Quarterly lookup: {sheet: {year: {quarter: {display_name: value}}}} ───
+    def _qtr_map(periods: list[dict]) -> dict[str, dict[str, dict]]:
+        out: dict[str, dict[str, dict]] = {}
+        for p in periods:
+            fy = p.get("fiscal_year", "")
+            q  = p.get("quarter", "")
+            if not fy or not q:
+                continue
+            out.setdefault(fy, {})[q] = p.get("fields") or {}
+        return out
+
+    q_is  = _qtr_map((quarterly.get("income")   or []))
+    q_bs  = _qtr_map((quarterly.get("balance")  or []))
+    q_cf  = _qtr_map((quarterly.get("cashflow") or []))
+
+    # ── Derive Q4 IS from Annual − Q1 − Q2 − Q3 ──────────────────────────────
+    # SEC doesn't file Q4 standalone for income/expense items; derive it here
+    # where we have access to both annual and quarterly data.
+    for fy in years:
+        fy_qtr = q_is.get(fy, {})
+        if "Q4" not in fy_qtr and all(q in fy_qtr for q in ("Q1", "Q2", "Q3")):
+            ann_fy = annual_is.get(fy, {})
+            if ann_fy:
+                q4 = {}
+                for field in _IS_DISPLAY:
+                    q1v = fy_qtr["Q1"].get(field)
+                    q2v = fy_qtr["Q2"].get(field)
+                    q3v = fy_qtr["Q3"].get(field)
+                    annv = ann_fy.get(field)
+                    if q1v is not None and q2v is not None and q3v is not None and annv is not None:
+                        q4[field] = annv - q1v - q2v - q3v
+                    else:
+                        q4[field] = None
+                q_is.setdefault(fy, {})["Q4"] = q4
+
+    # ── Margin / ratio helpers ────────────────────────────────────────────────
+    def _pct100(num, denom) -> Optional[float]:
+        """Return num/denom × 100, rounded to 2 dp; None if either is falsy."""
+        if num is None or not denom:
+            return None
+        return round(num / denom * 100, 2)
+
+    def _add_is_margins(data: dict) -> dict:
+        """Inject margin % rows into an IS data dict (display_name → value)."""
+        rev = data.get("Total Revenue")
+        out = dict(data)
+        out["Gross Margin %"]     = _pct100(data.get("Gross Profit"),       rev)
+        out["R&D % of Revenue"]   = _pct100(data.get("R&D Expenses"),       rev)
+        out["SG&A % of Revenue"]  = _pct100(data.get("SG&A Expenses"),      rev)
+        out["Operating Margin %"] = _pct100(data.get("Operating Income"),    rev)
+        out["EBITDA Margin %"]    = _pct100(data.get("EBITDA"),              rev)
+        out["Net Margin %"]       = _pct100(data.get("Net Income"),          rev)
+        return out
+
+    def _add_cf_ratios(data: dict, revenue) -> dict:
+        """Inject % of revenue rows into a CF data dict."""
+        out = dict(data)
+        out["CFO % of Revenue"]   = _pct100(data.get("Cash Flow from Operations"), revenue)
+        out["CapEx % of Revenue"] = _pct100(data.get("Capital Expenditures"),      revenue)
+        out["FCF % of Revenue"]   = _pct100(data.get("Free Cash Flow"),            revenue)
+        return out
+
+    def _add_bs_ratios(data: dict, revenue) -> dict:
+        """Inject % of revenue rows into a BS data dict."""
+        out = dict(data)
+        out["A/R % of Revenue"]        = _pct100(data.get("Accounts Receivable"),    revenue)
+        out["Inventory % of Revenue"]  = _pct100(data.get("Inventory"),              revenue)
+        out["A/P % of Revenue"]        = _pct100(data.get("Accounts Payable"),       revenue)
+        return out
+
+    # Apply margin rows to annual data
+    annual_is_m = {fy: _add_is_margins(v)                             for fy, v in annual_is.items()}
+    annual_cf_m = {fy: _add_cf_ratios(v, annual_is.get(fy, {}).get("Total Revenue"))
+                   for fy, v in annual_cf.items()}
+    annual_bs_m = {fy: _add_bs_ratios(v, annual_is.get(fy, {}).get("Total Revenue"))
+                   for fy, v in annual_bs.items()}
+
+    # Apply margin rows to quarterly data
+    def _enrich_qtr_is(qtr_map: dict) -> dict:
+        out: dict[str, dict[str, dict]] = {}
+        for fy, fy_data in qtr_map.items():
+            out[fy] = {}
+            for q, q_data in fy_data.items():
+                out[fy][q] = _add_is_margins(q_data)
+        return out
+
+    def _enrich_qtr_cf(qtr_map: dict, is_qtr: dict) -> dict:
+        out: dict[str, dict[str, dict]] = {}
+        for fy, fy_data in qtr_map.items():
+            out[fy] = {}
+            for q, q_data in fy_data.items():
+                rev = is_qtr.get(fy, {}).get(q, {}).get("Total Revenue")
+                out[fy][q] = _add_cf_ratios(q_data, rev)
+        return out
+
+    def _enrich_qtr_bs(qtr_map: dict, is_qtr: dict) -> dict:
+        out: dict[str, dict[str, dict]] = {}
+        for fy, fy_data in qtr_map.items():
+            out[fy] = {}
+            for q, q_data in fy_data.items():
+                rev = is_qtr.get(fy, {}).get(q, {}).get("Total Revenue")
+                out[fy][q] = _add_bs_ratios(q_data, rev)
+        return out
+
+    q_is_e = _enrich_qtr_is(q_is)
+    q_cf_e = _enrich_qtr_cf(q_cf, q_is)
+    q_bs_e = _enrich_qtr_bs(q_bs, q_is)
+
+    # ── Universal row lists (§ = section header, Σ = total row) ─────────────
+    _IS_ROWS = [
+        "§ Revenue",
+        "Total Revenue", "Cost of Revenue", "Σ Gross Profit", "Gross Margin %",
+        "§ Operating Expenses",
+        "R&D Expenses", "R&D % of Revenue",
+        "SG&A Expenses", "SG&A % of Revenue",
+        "Total Operating Expenses",
+        "Σ Operating Income", "Operating Margin %",
+        "§ Below Operating",
+        "EBITDA", "EBITDA Margin %",
+        "Pretax Income", "Income Tax Expense",
+        "Σ Net Income", "Net Margin %",
+        "§ Per Share",
+        "EPS (Basic)", "EPS (Diluted)",
+        "Shares Outstanding (Basic)", "Shares Outstanding (Diluted)", "D&A",
+    ]
+    _BS_ROWS = [
+        "§ ASSETS",
+        "§ Current Assets",
+        "Cash & Equivalents", "ST Investments", "Cash & ST Investments",
+        "Accounts Receivable", "A/R % of Revenue",
+        "Inventory", "Inventory % of Revenue",
+        "Σ Total Current Assets",
+        "§ Non-Current Assets",
+        "Net PPE", "Goodwill & Intangibles",
+        "Σ Total Assets",
+        "§ LIABILITIES",
+        "§ Current Liabilities",
+        "Accounts Payable", "A/P % of Revenue", "ST Debt",
+        "Σ Total Current Liabilities",
+        "§ Long-Term Liabilities",
+        "Long-Term Debt",
+        "Σ Total Non-Current Liabilities",
+        "Σ Total Liabilities",
+        "§ EQUITY",
+        "Total Stockholders Equity", "Retained Earnings",
+        "§ Debt Summary",
+        "Total Debt", "Net Debt",
+    ]
+    _CF_ROWS = [
+        "§ Operating Activities",
+        "Net Income", "D&A", "Stock-Based Compensation", "Change in Working Capital",
+        "Σ Cash Flow from Operations", "CFO % of Revenue",
+        "§ Investing Activities",
+        "Capital Expenditures", "CapEx % of Revenue",
+        "Σ Cash Flow from Investing",
+        "§ Free Cash Flow",
+        "Free Cash Flow", "FCF % of Revenue",
+        "§ Financing Activities",
+        "Dividends Paid", "Share Buybacks",
+        "Σ Cash Flow from Financing",
+        "§ Net Change",
+        "Net Change in Cash", "Ending Cash",
+    ]
+
+    # ── Company-specific rows: collect "~"-prefixed keys from all quarters ─────
+    def _company_rows(qtr_map: dict) -> list[str]:
+        seen: dict[str, None] = {}  # ordered set
+        for fy_data in qtr_map.values():
+            for q_data in fy_data.values():
+                for k in q_data:
+                    if k.startswith("~"):
+                        seen[k[1:]] = None  # strip prefix
+        return list(seen)
+
+    # Re-key quarterly data stripping "~" prefix for company-specific rows
+    def _strip_tilde(qtr_map: dict) -> dict:
+        out: dict[str, dict[str, dict]] = {}
+        for fy, fy_data in qtr_map.items():
+            out[fy] = {}
+            for q, q_data in fy_data.items():
+                out[fy][q] = {(k[1:] if k.startswith("~") else k): v for k, v in q_data.items()}
+        return out
+
+    payload = {
+        "symbol":  sym,
+        "years":   years,
+        "annual":  {"IS": annual_is_m, "BS": annual_bs_m, "CF": annual_cf_m},
+        "quarterly": {
+            "IS": _strip_tilde(q_is_e),
+            "BS": _strip_tilde(q_bs_e),
+            "CF": _strip_tilde(q_cf_e),
+        },
+        "universal_rows": {
+            "IS": _IS_ROWS,
+            "BS": _BS_ROWS,
+            "CF": _CF_ROWS,
+        },
+        "company_rows": {
+            "IS": _company_rows(q_is),
+            "BS": _company_rows(q_bs),
+            "CF": _company_rows(q_cf),
+        },
+    }
+    return json.dumps(payload, default=str)
 
 
 # ── Section helper ─────────────────────────────────────────────────────────────
@@ -766,6 +1077,7 @@ def render_report_html(result: dict) -> Path:
         desc = _e(prof["long_description"][:600]) + "…"
 
     date_display = gendt[:10] if gendt else ""
+    xlsx_payload = _build_xlsx_payload(d)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -774,6 +1086,7 @@ def render_report_html(result: dict) -> Path:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{_e(name)} ({_e(sym)}) — Equity Report</title>
 <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>{_XLSX_JS_INLINE}</script>
 <style>{_CSS}</style>
 </head>
 <body>
@@ -784,6 +1097,7 @@ def render_report_html(result: dict) -> Path:
   <div class="header-top">
     <div class="firm-name">Mini BB Research</div>
     <div class="report-type">Equity Research &nbsp;·&nbsp; {_e(sector or "Equity")}<br>{_e(date_display)} &nbsp;·&nbsp; Full Report</div>
+    <button class="xlsx-btn" onclick="downloadXLSX()">&#8675; Download XLSX</button>
   </div>
   <div class="header-main">
     <div>
@@ -895,6 +1209,229 @@ def render_report_html(result: dict) -> Path:
 </footer>
 
 </div><!-- /page -->
+
+<script type="application/json" id="xlsx-data">{xlsx_payload}</script>
+<script>
+function downloadXLSX() {{
+  if (typeof XLSX === 'undefined') {{
+    alert('Excel library failed to load. Check browser console or internet connection.');
+    return;
+  }}
+  var raw;
+  try {{
+    raw = JSON.parse(document.getElementById('xlsx-data').textContent);
+  }} catch(e) {{
+    alert('XLSX data error: ' + e.message); return;
+  }}
+  try {{
+    var wb = XLSX.utils.book_new();
+    ['IS','BS','CF'].forEach(function(sheet) {{
+      XLSX.utils.book_append_sheet(wb, buildSheet(raw, sheet), sheet);
+    }});
+    XLSX.writeFile(wb, raw.symbol + '_financials.xlsx');
+  }} catch(e) {{
+    alert('Build error: ' + e.message + ' | ' + (e.stack || ''));
+  }}
+}}
+
+function buildSheet(raw, sheet) {{
+  var years  = raw.years || [];
+  var uRows  = (raw.universal_rows || {{}})[sheet] || [];
+  var cRows  = (raw.company_rows  || {{}})[sheet] || [];
+  var annual = ((raw.annual       || {{}})[sheet]) || {{}};
+  var qdata  = ((raw.quarterly    || {{}})[sheet]) || {{}};
+
+  // ── Borders ────────────────────────────────────────────────────────────────
+  // White border used as "no-border" on every cell so Excel default gridlines
+  // are overridden (showGridLines is not supported by this library build).
+  var W    = {{style:"thin",  color:{{rgb:"FFFFFF"}}}};  // invisible
+  var THIN = {{style:"thin",  color:{{rgb:"AAAAAA"}}}};  // visible separator
+  var MED  = {{style:"medium",color:{{rgb:"888888"}}}};  // column divider
+  var NO_BORD = {{top:W, bottom:W, left:W, right:W}};
+
+  function withBorder(s, extra) {{
+    var b = Object.assign({{}}, NO_BORD, (s && s.border) || {{}}, extra);
+    return Object.assign({{}}, s || {{}}, {{border: b}});
+  }}
+  function labelRight(s) {{ return withBorder(s, {{right: MED}}); }}
+  function annRight(s)   {{ return withBorder(s, {{right: MED}}); }}
+  function hBottom(s)    {{ return withBorder(s, {{bottom: THIN}}); }}
+  function hTop(s)       {{ return withBorder(s, {{top: THIN}}); }}
+  function hTopBottom(s) {{ return hTop(hBottom(s)); }}
+
+  var ANN_FILL = {{fill:{{fgColor:{{rgb:"F0F0F0"}}}}}};
+
+  var ST = {{
+    title:   {{font:{{bold:true, sz:13}}}},
+    units:   {{font:{{italic:true, sz:9, color:{{rgb:"666666"}}}}}},
+    yearHdr: {{font:{{bold:true,sz:11}}, alignment:{{horizontal:"center"}}, fill:{{fgColor:{{rgb:"D8E4F0"}}}}}},
+    qHdr:    {{font:{{bold:true}},       alignment:{{horizontal:"center"}}}},
+    annHdr:  {{font:{{bold:true}},       alignment:{{horizontal:"center"}}, fill:{{fgColor:{{rgb:"F0F0F0"}}}}}},
+    major:   {{font:{{bold:true,sz:11}}, fill:{{fgColor:{{rgb:"D9D9D9"}}}}}},
+    sub:     {{font:{{bold:true,sz:10}}, fill:{{fgColor:{{rgb:"F2F2F2"}}}}}},
+    total:   {{font:{{bold:true}}}},
+    pct:     {{font:{{color:{{rgb:"666666"}}, italic:true}}}},
+    data:    {{}},
+    empty:   {{}},
+  }};
+
+  var SHEET_TITLES = {{IS:"Income Statement", BS:"Balance Sheet", CF:"Statement of Cash Flows"}};
+  var NO_MIL_KEYS  = ["EPS (Basic)", "EPS (Diluted)"];
+
+  function toMil(key, v) {{
+    if (v === null || v === undefined || v === '') return v;
+    if (typeof v !== 'number') return v;
+    if (key.indexOf('%') !== -1) return v;
+    if (NO_MIL_KEYS.indexOf(key) !== -1) return v;
+    return Math.round(v / 1e6 * 10) / 10;
+  }}
+
+  var ws = {{}};
+  var nCols = 1 + years.length * 5;
+  var rowNum = 0;
+
+  function toCol(c) {{
+    var s = ''; c += 1;
+    while (c > 0) {{
+      var r = (c - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      c = Math.floor((c - 1) / 26);
+    }}
+    return s;
+  }}
+
+  function sc(r, c, v, t, sty) {{
+    ws[toCol(c) + (r + 1)] = {{v: v, t: t || 's', s: sty || {{}}}};
+  }}
+
+  function fillRow(r, sty) {{
+    for (var c = 0; c < nCols; c++) {{ sc(r, c, '', 's', sty); }}
+  }}
+
+  ws['!merges'] = [];
+
+  // ── Title row 1: sheet name ───────────────────────────────────────────────
+  sc(rowNum, 0, SHEET_TITLES[sheet] || sheet, 's', withBorder(ST.title, {{right:W}}));
+  for (var c = 1; c < nCols; c++) {{ sc(rowNum, c, '', 's', withBorder(ST.empty, {{}})); }}
+  ws['!merges'].push({{s:{{r:rowNum,c:0}}, e:{{r:rowNum,c:nCols-1}}}});
+  rowNum++;
+
+  // ── Title row 2: units note ───────────────────────────────────────────────
+  sc(rowNum, 0, 'In millions, except EPS', 's', withBorder(ST.units, {{right:W}}));
+  for (var c = 1; c < nCols; c++) {{ sc(rowNum, c, '', 's', withBorder(ST.empty, {{}})); }}
+  ws['!merges'].push({{s:{{r:rowNum,c:0}}, e:{{r:rowNum,c:nCols-1}}}});
+  rowNum++;
+
+  // ── h1: year header row ───────────────────────────────────────────────────
+  sc(rowNum, 0, '', 's', hBottom(labelRight(ST.empty)));
+  years.forEach(function(y, i) {{
+    var s = 1 + i * 5;
+    sc(rowNum, s,   'FY' + y, 's', hBottom(ST.yearHdr));
+    sc(rowNum, s+1, '',       's', hBottom(ST.yearHdr));
+    sc(rowNum, s+2, '',       's', hBottom(ST.yearHdr));
+    sc(rowNum, s+3, '',       's', hBottom(ST.yearHdr));
+    sc(rowNum, s+4, '',       's', hBottom(annRight(ST.yearHdr)));
+    ws['!merges'].push({{s:{{r:rowNum,c:s}}, e:{{r:rowNum,c:s+4}}}});
+  }});
+  rowNum++;
+
+  // ── h2: quarter header row ────────────────────────────────────────────────
+  sc(rowNum, 0, '', 's', hBottom(labelRight(ST.empty)));
+  years.forEach(function(_, i) {{
+    var s = 1 + i * 5;
+    sc(rowNum, s,   'Q1',     's', hBottom(ST.qHdr));
+    sc(rowNum, s+1, 'Q2',     's', hBottom(ST.qHdr));
+    sc(rowNum, s+2, 'Q3',     's', hBottom(ST.qHdr));
+    sc(rowNum, s+3, 'Q4',     's', hBottom(ST.qHdr));
+    sc(rowNum, s+4, 'Annual', 's', hBottom(annRight(ST.annHdr)));
+  }});
+  rowNum++;
+
+  // ── data rows ─────────────────────────────────────────────────────────────
+  function pushRow(label) {{
+    var key     = label.replace(/^[§Σ] /, '');
+    var isSec   = label.charAt(0) === '§';
+    var isTotal = label.charAt(0) === 'Σ';
+    var isPct   = !isSec && !isTotal && label.indexOf('%') !== -1;
+
+    var secST = ST.sub;
+    if (isSec) {{
+      var rest = label.slice(2);
+      secST = (rest.toUpperCase() === rest) ? ST.major : ST.sub;
+    }}
+
+    var lStyle, dStyle, aStyle;
+    if (isSec) {{
+      lStyle = hBottom(labelRight(secST));
+      dStyle = hBottom(secST);
+      aStyle = hBottom(annRight(secST));
+    }} else if (isTotal) {{
+      lStyle = labelRight(hTopBottom(ST.total));
+      dStyle = hTopBottom(ST.total);
+      aStyle = annRight(hTopBottom(Object.assign({{}}, ST.total, ANN_FILL)));
+    }} else if (isPct) {{
+      lStyle = labelRight(ST.pct);
+      dStyle = withBorder(ST.pct, {{}});
+      aStyle = annRight(Object.assign({{}}, ST.pct, ANN_FILL));
+    }} else {{
+      lStyle = labelRight(ST.data);
+      dStyle = withBorder(ST.data, {{}});
+      aStyle = annRight(Object.assign({{}}, ST.data, ANN_FILL));
+    }}
+
+    sc(rowNum, 0, key, 's', lStyle);
+
+    if (isSec) {{
+      years.forEach(function(_, i) {{
+        var s = 1 + i * 5;
+        sc(rowNum, s,   '', 's', dStyle);
+        sc(rowNum, s+1, '', 's', dStyle);
+        sc(rowNum, s+2, '', 's', dStyle);
+        sc(rowNum, s+3, '', 's', dStyle);
+        sc(rowNum, s+4, '', 's', aStyle);
+      }});
+    }} else {{
+      years.forEach(function(y, i) {{
+        var s = 1 + i * 5;
+        var qy = (qdata[y] || {{}});
+        var ay = (annual[y] || {{}});
+        ['Q1','Q2','Q3','Q4'].forEach(function(q, qi) {{
+          var raw_v = ((qy[q] || {{}})[key]);
+          var v = toMil(key, raw_v);
+          if (v !== undefined && v !== null && v !== '') {{
+            sc(rowNum, s + qi, v, 'n', dStyle);
+          }} else {{
+            sc(rowNum, s + qi, '', 's', dStyle);
+          }}
+        }});
+        var raw_av = ay[key];
+        var av = toMil(key, raw_av);
+        if (av !== undefined && av !== null && av !== '') {{
+          sc(rowNum, s + 4, av, 'n', aStyle);
+        }} else {{
+          sc(rowNum, s + 4, '', 's', aStyle);
+        }}
+      }});
+    }}
+    rowNum++;
+  }}
+
+  uRows.forEach(function(r) {{ pushRow(r); }});
+  if (cRows.length > 0) {{
+    pushRow('§ Company Specific');
+    cRows.forEach(function(r) {{ pushRow(r); }});
+  }}
+
+  ws['!ref'] = 'A1:' + toCol(nCols - 1) + rowNum;
+
+  var colWidths = [{{wch: 36}}];
+  years.forEach(function() {{
+    for (var i = 0; i < 5; i++) {{ colWidths.push({{wch: 13}}); }}
+  }});
+  ws['!cols'] = colWidths;
+  return ws;
+}}
+</script>
 </body>
 </html>"""
 

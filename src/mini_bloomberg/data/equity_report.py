@@ -13,6 +13,7 @@ from mini_bloomberg.data.equity_fundamentals import get_financials
 from mini_bloomberg.data.equity_peers import get_comparables
 from mini_bloomberg.data.equity_price import get_price_history
 from mini_bloomberg.data.equity_profile import get_profile
+from mini_bloomberg.data.equity_quarterly import get_quarterly_financials
 from mini_bloomberg.data.schemas import (
     AnalystRatings, Comparables, EquityReport, Financials,
     FinancialRatios, ValuationMultiples,
@@ -36,6 +37,12 @@ def get_equity_report(ticker: Ticker, price_days: int = 90) -> EquityReport:
         report.financials = get_financials(ticker, years=4)
     except Exception:
         pass
+
+    # ── Quarterly data (for XLSX download) ────────────────────────────────────
+    try:
+        report.quarterly = get_quarterly_financials(ticker)
+    except Exception:
+        pass  # quarterly is optional; RPT renders fine without it
 
     # ── Analyst ratings ────────────────────────────────────────────────────────
     try:

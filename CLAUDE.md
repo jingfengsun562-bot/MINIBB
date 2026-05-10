@@ -6,9 +6,9 @@ Rules and context for Claude Code to follow while building this project. Read th
 
 ## Project: Mini-Bloomberg
 
-A CLI terminal that mimics Bloomberg for equity analysis, powered by OpenBB + FMP for data and Claude as the natural-language orchestrator.
+A CLI terminal that mimics Bloomberg for equity and FX analysis, powered by OpenBB + FMP + yfinance for data and Claude as the natural-language orchestrator.
 
-**Primary goal**: Progressively implement Bloomberg equity functions from `Bloomberg Functions/02_Equity.md`, building toward a comprehensive equity analysis terminal. The CLI is the UI; the real asset is a clean set of tool-callable functions that Claude can compose.
+**Primary goal**: Progressively implement Bloomberg functions from `Bloomberg Functions/02_Equity.md` and `04_FX.md`, building toward a comprehensive analysis terminal. The CLI is the UI; the real asset is a clean set of tool-callable functions that Claude can compose.
 
 **Approach**: Add functions one at a time, in priority order. Each function follows the same three-layer pattern. Quality over quantity — a well-implemented function beats a broken one.
 
@@ -46,7 +46,11 @@ Reason: LLMs reason reliably about typed, schema'd data. They struggle with raw 
 
 ### 4. Cache aggressively
 
-Use `diskcache` with 24h TTL on every data-layer call. OpenBB and FMP are slow and rate-limited. Caching turns 30s feedback loops into 0.1s.
+Use `diskcache` with TTL on every data-layer call. OpenBB and FMP are slow and rate-limited. Caching turns 30s feedback loops into 0.1s.
+
+- Equity/fundamentals: 24h TTL
+- FX spot rates and boards: 5-min TTL (rates move fast)
+- FX history / volatility / ranking: 1h TTL
 
 ### 5. Fail gracefully, never silently
 
@@ -62,6 +66,8 @@ Target: all functions in `Bloomberg Functions/02_Equity.md`. Implement in priori
 
 ### ✅ Implemented
 
+**Equity (`02_Equity.md`)**
+
 | Function | Bloomberg equivalent | What it does |
 |---|---|---|
 | `DES` | Security Description | Company profile: name, sector, exchange, market cap, identifiers |
@@ -69,8 +75,18 @@ Target: all functions in `Bloomberg Functions/02_Equity.md`. Implement in priori
 | `GP` | Graph Price | ASCII price chart, configurable lookback |
 | `ANR` | Analyst Recommendations | Consensus rating, target price, # of analysts |
 | `COMP` | Comparable Analysis | Side-by-side peer comparison on key ratios |
-| `RPT` | (custom) | Full HTML equity report combining all of the above |
 | `RV` | Relative Value | Valuation + margin comparison for ticker vs. peer group |
+| `RPT` | (custom) | Full HTML equity report combining all of the above |
+
+**FX (`04_FX.md`)**
+
+| Function | Bloomberg equivalent | What it does |
+|---|---|---|
+| `FXIP` | FX Rates Monitor | G10 or EM spot rates vs USD — rate, 1d change, 52W range |
+| `FXCA` | FX Calculator | Convert an amount between any two currencies (cross via USD) |
+| `FXHV` | FX Historical Vol | Annualised HV across 7 windows (10d, 20d, 30d, 60d, 90d, 180d, 1y) |
+| `FRD` | FX Forward Rates | CIP-implied forward curve across 9 tenors (O/N → 1Y) |
+| `WCR` | World Currency Ranker | G10/EM currencies ranked by 1d/1w/1m/3m/YTD performance |
 
 ### 🔜 Next Priority (feasible with FMP/OpenBB free tier)
 
@@ -96,9 +112,9 @@ Target: all functions in `Bloomberg Functions/02_Equity.md`. Implement in priori
 | `TECH` | Technical Analysis | Summary of technical signals and indicators |
 | `EQRV` | Equity Relative Value | Scatter plots: valuation multiples vs. fundamentals |
 
-### ⛔ Out of Scope (non-equity asset classes)
+### ⛔ Out of Scope
 
-Functions from `03_Fixed_Income.md`, `04_FX.md`, `05_Commodities.md`, `06_Derivatives_Options.md`, etc. — equity only for now.
+Functions from `03_Fixed_Income.md`, `05_Commodities.md`, `06_Derivatives_Options.md`, and other non-equity/non-FX asset classes.
 
 ---
 
@@ -163,7 +179,7 @@ mini-bloomberg/
 │   │   ├── cache.py
 │   │   └── session.py
 │   ├── data/
-│   │   ├── schemas.py          # Pydantic models for all data types
+│   │   ├── schemas.py          # Pydantic models for all data types (equity + FX)
 │   │   ├── providers/
 │   │   │   ├── fmp_provider.py
 │   │   │   └── openbb_provider.py
@@ -171,7 +187,8 @@ mini-bloomberg/
 │   │   ├── equity_fundamentals.py
 │   │   ├── equity_price.py
 │   │   ├── equity_estimates.py
-│   │   └── equity_peers.py
+│   │   ├── equity_peers.py
+│   │   └── fx.py               # FX data via yfinance (spot, history, vol, forward, ranking)
 │   ├── functions/
 │   │   ├── base.py             # BloombergFunction ABC
 │   │   ├── des.py
@@ -179,10 +196,17 @@ mini-bloomberg/
 │   │   ├── gp.py
 │   │   ├── anr.py
 │   │   ├── comp.py
-│   │   └── rpt.py              # Full HTML report
+│   │   ├── rv.py
+│   │   ├── rpt.py              # Full HTML report
+│   │   ├── fxip.py             # FX spot monitor
+│   │   ├── fxca.py             # FX calculator
+│   │   ├── fxhv.py             # FX historical volatility
+│   │   ├── frd.py              # FX forward rate curve
+│   │   └── wcr.py              # World currency ranker
 │   ├── render/
-│   │   ├── cli_renderer.py     # Rich tables, panels, plotext charts
+│   │   ├── cli_renderer.py     # Rich tables, panels, plotext charts (equity + FX)
 │   │   ├── html_renderer.py    # IB-style HTML report (RPT output)
+│   │   ├── markdown_renderer.py
 │   │   └── json_renderer.py    # clean JSON for LLM consumption
 │   ├── cli/
 │   │   ├── app.py
@@ -250,7 +274,8 @@ class DES(BloombergFunction):
 
 ## What NOT to Do
 
-- ❌ Don't implement non-equity asset class functions (Fixed Income, FX, Commodities, etc.)
+- ❌ Don't implement Fixed Income, Commodities, or Derivatives functions (out of scope)
+- ❌ For FX functions: don't add live rate sources without asking — the CIP-forward approximation in `FRD` uses hardcoded rates intentionally
 - ❌ Don't build a web UI. CLI only.
 - ❌ Don't build a charting library. Use `plotext` for terminal charts.
 - ❌ Don't use LangChain or LlamaIndex. Raw Anthropic SDK only.

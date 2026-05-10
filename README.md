@@ -1,12 +1,13 @@
 # Mini-Bloomberg
 
-A CLI terminal that mimics Bloomberg for equity analysis, powered by **OpenBB + FMP** for data and **Claude** as a natural-language orchestrator.
+A CLI terminal that mimics Bloomberg for equity and FX analysis, powered by **OpenBB + FMP + yfinance** for data and **Claude** as a natural-language orchestrator.
 
 ```
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  MINI-BLOOMBERG  Equity Analysis Terminal                                   │
+│  MINI-BLOOMBERG  Equity & FX Analysis Terminal                              │
 │                                                                             │
-│  Type a ticker to load it, then run DES / FA / GP / ANR / COMP / RV / RPT. │
+│  Equity: DES / FA / GP / ANR / COMP / RV / RPT                             │
+│  FX:     FXIP / FXCA / FXHV / FRD / WCR                                   │
 │  Prefix with ? to ask the AI analyst. HELP <GO> for all commands.          │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 
@@ -31,6 +32,8 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 
 ## Features
 
+**Equity**
+
 | Function | Bloomberg equivalent | What it does |
 |---|---|---|
 | `DES` | Description | Company profile: name, sector, market cap, identifiers |
@@ -40,9 +43,24 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 | `COMP` | Comparables | Peer table: margins, EBITDA, debt, beta |
 | `RV` | Relative Value | Valuation multiples + margin comparison vs. peer group |
 | `RPT` | (custom) | Full investment-bank-style HTML equity report (opens in browser) |
-| `? <query>` | NLP | Claude agent with tool-use — runs functions and synthesises |
 
-**Global coverage**: US, HK, JP, FR, DE, UK and more via `SYMBOL EXCHANGE Equity` format.
+**FX**
+
+| Function | Bloomberg equivalent | What it does |
+|---|---|---|
+| `FXIP` | FX Rates Monitor | G10 or EM spot rates vs USD — price, 1d change, 52W range |
+| `FXCA` | FX Calculator | Convert an amount between any two currencies |
+| `FXHV` | FX Historical Vol | Annualised historical volatility across 7 windows (10d – 1y) |
+| `FRD` | FX Forward Rates | CIP-implied forward curve across 9 tenors (O/N → 1Y) |
+| `WCR` | World Currency Ranker | G10/EM currencies ranked by performance |
+
+**AI**
+
+| Command | What it does |
+|---|---|
+| `? <query>` | Claude agent with tool-use — runs any function and synthesises an answer |
+
+**Global equity coverage**: US, HK, JP, FR, DE, UK and more via `SYMBOL EXCHANGE Equity` format.
 
 ---
 
@@ -57,7 +75,9 @@ cli/repl.py          ← prompt-toolkit REPL (history, tab-complete, status bar)
     ▼
 cli/dispatcher.py    ← routes: TICKER <GO> | FUNCTION <GO> | ? query <GO>
     │
-    ├── functions/   ← DES / FA / GP / ANR / COMP / RV / RPT  (BloombergFunction ABC)
+    ├── functions/   ← DES / FA / GP / ANR / COMP / RV / RPT  (equity)
+    │               ← FXIP / FXCA / FXHV / FRD / WCR         (FX)
+    │                      (BloombergFunction ABC)
     │       │              each implements .run() and .tool_schema()
     │       ▼
     │   data/        ← provider routers → FMP (US) or OpenBB/yfinance (non-US)
@@ -102,9 +122,10 @@ cp .env.example .env
 |---|---|---|
 | `FMP_API_KEY` | [financialmodelingprep.com](https://financialmodelingprep.com/developer/docs) (free) | FA, GP, ANR, COMP, RV, RPT |
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | `? <query>` AI agent |
-| `OPENBB_PAT` | [my.openbb.co](https://my.openbb.co/app/platform/pat) (optional) | Enhanced non-US data |
+| `OPENBB_PAT` | [my.openbb.co](https://my.openbb.co/app/platform/pat) (optional) | Enhanced non-US equity data |
 
-> **FMP free tier**: 250 calls/day. All data is cached 24h so normal use stays well within limits.
+> **FMP free tier**: 250 calls/day. Equity data is cached 24h so normal use stays well within limits.
+> **FX functions** (FXIP/FXCA/FXHV/FRD/WCR) use **yfinance only** — no API key required.
 
 ### 4. Run
 
@@ -120,18 +141,30 @@ uv run mini-bb des "AAPL US Equity"   # one-shot command
 ### REPL commands
 
 ```
-AAPL US Equity <GO>     Load a security
-DES <GO>                Company description
-FA <GO>                 Financial analysis (4 years)
-GP <GO>                 Price chart (default 1 year)
-GP --days 90 <GO>       Price chart (custom period)
-ANR <GO>                Analyst ratings
-COMP <GO>               Peer comparison table
-RV <GO>                 Relative value — valuation vs. peers
-RPT <GO>                Full HTML equity report → reports/<TICKER>_<DATE>.html
-? <your question> <GO>  Ask the AI analyst
-HELP <GO>               List all commands
-QUIT <GO>               Exit
+── Equity ──────────────────────────────────────────────────────────────────
+AAPL US Equity <GO>              Load a security
+DES <GO>                         Company description
+FA <GO>                          Financial analysis (4 years)
+GP <GO>                          Price chart (default 1 year)
+GP --days 90 <GO>                Price chart (custom period)
+ANR <GO>                         Analyst ratings
+COMP <GO>                        Peer comparison table
+RV <GO>                          Relative value — valuation vs. peers
+RPT <GO>                         Full HTML equity report → reports/<TICKER>_<DATE>.html
+
+── FX ──────────────────────────────────────────────────────────────────────
+FXIP <GO>                        G10 spot rates vs USD
+FXIP --group em <GO>             EM spot rates vs USD
+FXCA --from USD --to JPY --amount 1000 <GO>   Convert 1000 USD → JPY
+FXHV --base EUR --quote USD <GO> EUR/USD historical volatility
+FRD --base EUR --quote USD <GO>  EUR/USD forward rate curve
+WCR <GO>                         G10 currencies ranked by performance
+WCR --group em --sort-by 1m <GO> EM currencies ranked by 1-month return
+
+── General ─────────────────────────────────────────────────────────────────
+? <your question> <GO>           Ask the AI analyst
+HELP <GO>                        List all commands
+QUIT <GO>                        Exit
 ```
 
 ### Supported ticker formats
@@ -161,6 +194,8 @@ uv run mini-bb rpt  "AAPL US Equity"
 
 ## Data sources
 
+**Equity**
+
 | Data | US equities | Non-US equities |
 |---|---|---|
 | Company profile | OpenBB/yfinance | OpenBB/yfinance |
@@ -169,6 +204,15 @@ uv run mini-bb rpt  "AAPL US Equity"
 | Price targets | FMP `/stable/price-target-consensus` | — |
 | Analyst ratings | OpenBB/yfinance consensus | OpenBB/yfinance |
 | Peers | FMP `/stable/stock-peers` | — |
+
+**FX** — all functions use **yfinance only** (ticker format: `EURUSD=X`)
+
+| Data | Source | Cache TTL |
+|---|---|---|
+| Spot rates, 52W range | yfinance 1y history | 5 min |
+| Historical OHLCV (FXHV/FRD) | yfinance 1–2y history | 1h |
+| Currency performance (WCR) | yfinance 1y history | 10 min |
+| Forward rates (FRD) | CIP formula + hardcoded approx. rates | 1h |
 
 ---
 
@@ -210,6 +254,69 @@ Open the `.html` file in any browser. Use browser **Print → Save as PDF** for 
 
 ---
 
+## FX Functions
+
+All FX functions require no API key — data comes from yfinance free tier.
+
+### FXIP — FX Spot Monitor
+
+```
+MINI-BB> FXIP <GO>               ← G10 vs USD
+MINI-BB> FXIP --group em <GO>    ← EM vs USD
+
+  Pair      Spot      Chg %    52W High   52W Low
+  EURUSD    1.0821    ▲ 0.42%  1.1214     1.0178
+  GBPUSD    1.3305    ▲ 0.18%  1.3434     1.2299
+  JPYUSD    0.0069    ▼ 0.31%  0.0072     0.0063
+  ...
+```
+
+### FXCA — FX Calculator
+
+```
+MINI-BB> FXCA --from USD --to JPY --amount 1000 <GO>
+
+  USD → JPY    Rate: 144.820000    1,000 USD = 144,820.0000 JPY
+```
+
+### FXHV — FX Historical Volatility
+
+```
+MINI-BB> FXHV --base EUR --quote USD <GO>
+
+  EURUSD Historical Volatility
+  10d: 7.23%   20d: 6.91%   30d: 7.04%   60d: 7.45%
+  90d: 7.62%  180d: 7.38%    1y: 7.55%
+```
+
+### FRD — FX Forward Rate Curve
+
+Rates computed via Covered Interest Parity. Uses approximate benchmark rates (not live OIS/SOFR).
+
+```
+MINI-BB> FRD --base EUR --quote USD <GO>
+
+  Tenor   Days   Forward     Fwd Points   Impl. Yield Diff
+  O/N        1   1.08200     -0.10 pips   -1.30%
+  1W         7   1.08175     -2.48 pips   -1.30%
+  1M        30   1.07962    -24.80 pips   -1.30%
+  ...
+```
+
+### WCR — World Currency Ranker
+
+```
+MINI-BB> WCR <GO>
+MINI-BB> WCR --group em --sort-by 1m <GO>
+
+  Currency   Spot      1D       1W       1M       3M      YTD
+  EUR        1.0821  ▲0.42%  ▲1.23%  ▲2.11%  ▲3.45%  ▲4.20%
+  GBP        1.3305  ▲0.18%  ▲0.91%  ▲1.55%  ▲2.80%  ▲3.10%
+  ...
+```
+
+---
+
 ## AI Agent
 
 The `?` prefix routes to Claude (`claude-sonnet-4-6` by default, switchable to `claude-opus-4-7` via `CLAUDE_MODEL` in `.env`).
@@ -233,13 +340,18 @@ Infra       uv, python-dotenv, pytest
 
 ---
 
-## Known limitations (v1)
+## Known limitations
 
+**Equity**
 - **Chinese A-shares**: requires tushare/akshare — not supported
 - **India BSE**: ticker mapping unreliable via yfinance
 - **COMP for non-US**: FMP peer list is US-centric; non-US peers may be incomplete
 - **ANR for non-US**: price targets only available for US tickers via FMP
-- **Sony revenue in COMP**: displays in JPY (native), not USD-converted
+- **Native currency in COMP**: non-US revenue displays in native currency, not USD-converted
+
+**FX**
+- **FRD forward rates**: computed from hardcoded approximate benchmark rates, not live OIS/SOFR swap points — directionally correct but not trading-grade
+- **FXCA cross rates**: routes through USD when a direct yfinance pair is unavailable; minor rounding on exotic crosses
 
 ---
 

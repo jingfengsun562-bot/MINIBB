@@ -338,6 +338,7 @@ class EquityReport(BaseModel):
     valuation: Optional[ValuationMultiples] = None
     analyst: Optional[AnalystRatings] = None
     comparables: Optional[Comparables] = None
+    quarterly: Optional["QuarterlyFinancials"] = None
 
 
 # ─── FX ───────────────────────────────────────────────────────────────────────
@@ -417,3 +418,22 @@ class FXRanking(BaseModel):
     """WCR output — ranked currencies by performance."""
     as_of: str
     rows: list[FXRankRow] = []
+
+
+# ─── Quarterly financials ──────────────────────────────────────────────────────
+
+class QuarterlyPeriod(BaseModel):
+    """One quarter's worth of financial data for a single statement."""
+    date: str                                      # period-end date "2025-03-29"
+    fiscal_year: str                               # "2025"
+    quarter: str                                   # "Q1" | "Q2" | "Q3" | "Q4"
+    fields: dict[str, Optional[float]] = {}        # display_row_name -> value
+
+
+class QuarterlyFinancials(BaseModel):
+    """Quarterly IS / BS / CF periods for XLSX download."""
+    symbol: str
+    currency: Optional[str] = None
+    income:   list[QuarterlyPeriod] = []
+    balance:  list[QuarterlyPeriod] = []
+    cashflow: list[QuarterlyPeriod] = []
