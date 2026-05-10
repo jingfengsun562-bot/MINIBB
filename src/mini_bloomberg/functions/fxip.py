@@ -1,31 +1,79 @@
 """FXIP — FX Information & Pricing.
 
 Multi-currency spot rate monitor. Supports G10, EM, all, or a custom
-list of currencies chosen interactively.
-Equivalent to Bloomberg's FXIP multi-currency dashboard.
+list of currencies. Equivalent to Bloomberg's FXIP multi-currency dashboard.
+
+Accepted input styles
+---------------------
+Positional (recommended):
+    FXIP <GO>                  # G10 vs USD (defaults)
+    FXIP g10 <GO>              # G10 vs USD
+    FXIP em <GO>               # EM vs USD
+    FXIP all <GO>              # G10 + EM vs USD
+    FXIP em EUR <GO>           # EM currencies vs EUR
+    FXIP g10 JPY <GO>          # G10 currencies vs JPY
+    FXIP USD <GO>              # bare quote ccy -> G10 vs USD
+    FXIP EUR <GO>              # bare quote ccy -> G10 vs EUR
+
+Via flags (also accepted):
+    FXIP --group em --quote EUR <GO>
+
+Via LLM tool call:
+    {"group": "em", "quote": "EUR"}
+
+Positional parsing rules
+------------------------
+Token 1 (optional): group keyword (g10 | em | all) OR a 3-letter ccy code (treated as quote)
+Token 2 (optional): 3-letter quote currency ISO code
 """
 
 from mini_bloomberg.core.errors import DataSourceError, MiniBloombergError
 from mini_bloomberg.data.fx import G10_CURRENCIES, EM_CURRENCIES, get_fx_board
 from mini_bloomberg.functions.base import BloombergFunction
 
-# Ordered list shown to the user when building a custom set
 ALL_KNOWN_CURRENCIES = sorted(set(G10_CURRENCIES + EM_CURRENCIES))
-
-# Additional currencies not in G10/EM lists but commonly requested
 EXTRA_CURRENCIES = [
     "HKD", "SGD", "CNY", "INR", "KRW", "IDR", "THB", "PHP",
     "MYR", "VND", "AED", "SAR", "ILS", "QAR", "KWD",
 ]
-
 _DISPLAY_CURRENCIES = sorted(set(ALL_KNOWN_CURRENCIES + EXTRA_CURRENCIES))
+
+_GROUPS = {"g10", "em", "all"}
+
+
+def _parse_fxip_args(ticker: str) -> tuple[str, str]:
+    """
+    Parse positional ticker string into (group, quote).
+
+    Examples:
+      ""           -> ("g10", "USD")
+      "g10"        -> ("g10", "USD")
+      "em"         -> ("em",  "USD")
+      "all"        -> ("all", "USD")
+      "EUR"        -> ("g10", "EUR")   # bare 3-letter ccy -> quote
+      "em EUR"     -> ("em",  "EUR")
+      "g10 JPY"    -> ("g10", "JPY")
+      "USD"        -> ("g10", "USD")   # bare USD -> quote
+    """
+    tokens = ticker.upper().strip().split()
+    group = "g10"
+    quote = "USD"
+
+    for tok in tokens:
+        if tok.lower() in _GROUPS:
+            group = tok.lower()
+        elif len(tok) == 3 and tok.isalpha():
+            quote = tok
+
+    return group, quote
 
 
 class FXIP(BloombergFunction):
     name = "FXIP"
     description = (
-        "FX Information & Pricing — spot rates, daily change, and 52-week range "
-        "for G10, EM, all, or a custom selection of currencies vs a chosen quote."
+        "FX Information & Pricing -- spot rates, daily change, and 52-week range "
+        "for G10, EM, or all currencies vs a chosen quote currency. "
+        "Accepts: FXIP  |  FXIP em  |  FXIP g10 EUR  |  FXIP em JPY  |  --group em --quote EUR."
     )
 
     def run(
@@ -37,43 +85,43 @@ class FXIP(BloombergFunction):
         **kwargs,
     ) -> dict:
         """
-        Args:
-            group:      "g10" (default) | "em" | "all" | "custom"
-                        Use "custom" to pick individual currencies interactively.
-            quote:      counter currency (default "USD").
-                        If omitted, the user is prompted to choose.
-            currencies: explicit list of base currencies to use when group="custom"
-                        and the caller supplies them directly (bypasses the prompt).
+        Resolve group and quote from whichever input form was supplied.
+
+        Priority order:
+          1. explicit group + quote keyword args
+          2. ticker positional string from the CLI dispatcher
+          3. Defaults: g10 / USD
         """
-        # Resolve quote currency
-        if quote is None:
-            quote = self._prompt_quote_currency()
-        quote = quote.upper().strip()
-
-        # Resolve base currencies
-        group = group.lower().strip()
-        if group == "em":
-            base_currencies = list(EM_CURRENCIES)
-        elif group == "all":
-            base_currencies = list(G10_CURRENCIES) + list(EM_CURRENCIES)
-        elif group == "custom":
-            if currencies:
-                base_currencies = [c.upper().strip() for c in currencies]
-            else:
-                base_currencies = self._prompt_custom_currencies(quote)
-        else:
-            # Default: g10
-            base_currencies = list(G10_CURRENCIES)
-
-        # Remove quote ccy from base list if present (e.g. USD vs USD makes no sense)
-        base_currencies = [c for c in base_currencies if c != quote]
-
-        if not base_currencies:
-            return {"status": "error", "message": "No base currencies selected."}
-
-        pairs = [(ccy, quote) for ccy in base_currencies]
-
         try:
+            # If ticker carries positional args, let them override defaults
+            if ticker is not None:
+                parsed_group, parsed_quote = _parse_fxip_args(ticker)
+                # only override if the caller didn't supply explicit kwargs
+                if group == "g10":    # still at default
+                    group = parsed_group
+                if quote is None:
+                    quote = parsed_quote
+
+            if quote is None:
+                quote = "USD"
+            quote = quote.upper().strip()
+            group = group.lower().strip()
+
+            if group == "em":
+                base_currencies = list(EM_CURRENCIES)
+            elif group == "all":
+                base_currencies = list(G10_CURRENCIES) + list(EM_CURRENCIES)
+            elif group == "custom":
+                base_currencies = [c.upper().strip() for c in currencies] if currencies else list(G10_CURRENCIES)
+            else:
+                base_currencies = list(G10_CURRENCIES)
+
+            base_currencies = [c for c in base_currencies if c != quote]
+
+            if not base_currencies:
+                return {"status": "error", "message": "No base currencies selected."}
+
+            pairs = [(ccy, quote) for ccy in base_currencies]
             board = get_fx_board(pairs=pairs)
             return {
                 "status": "ok",
@@ -82,75 +130,11 @@ class FXIP(BloombergFunction):
                 "quote": quote,
                 "currencies": base_currencies,
             }
+
         except MiniBloombergError as e:
             return {"status": "error", "message": str(e)}
         except Exception as e:
             return {"status": "error", "message": f"Unexpected error: {e}"}
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _prompt_quote_currency(self) -> str:
-        """Ask the user which currency to use as the quote (counter) leg."""
-        common = ["USD", "EUR", "GBP", "JPY", "CHF"]
-        print("\nSelect quote (counter) currency:")
-        for i, ccy in enumerate(common, start=1):
-            print(f"  {i}. {ccy}")
-        print("  0. Enter a custom currency code")
-
-        while True:
-            raw = input("Choice [default USD]: ").strip()
-            if raw == "" or raw.upper() == "USD":
-                return "USD"
-            if raw == "0":
-                code = input("Enter ISO currency code: ").strip().upper()
-                if code:
-                    return code
-            elif raw.isdigit():
-                idx = int(raw)
-                if 1 <= idx <= len(common):
-                    return common[idx - 1]
-            elif raw.upper() in _DISPLAY_CURRENCIES or (raw.isalpha() and len(raw) == 3):
-                return raw.upper()
-            print("  Invalid choice — please try again.")
-
-    def _prompt_custom_currencies(self, quote: str) -> list[str]:
-        """Interactive multi-select for base currencies."""
-        available = [c for c in _DISPLAY_CURRENCIES if c != quote]
-        print(f"\nAvailable currencies (quote: {quote}):")
-        cols = 5
-        for i, ccy in enumerate(available, start=1):
-            end = "\n" if i % cols == 0 else "  "
-            print(f"  {i:>3}. {ccy}", end=end)
-        if len(available) % cols != 0:
-            print()  # newline after last partial row
-
-        print(
-            "\nEnter numbers separated by spaces/commas, or type ISO codes directly."
-            "\nExamples:  1 3 5     or     USD EUR GBP     or     1,4,EUR"
-        )
-
-        selected: list[str] = []
-        while not selected:
-            raw = input("Your selection: ").strip()
-            tokens = raw.replace(",", " ").split()
-            for token in tokens:
-                if token.isdigit():
-                    idx = int(token)
-                    if 1 <= idx <= len(available):
-                        ccy = available[idx - 1]
-                        if ccy not in selected:
-                            selected.append(ccy)
-                elif token.upper() in _DISPLAY_CURRENCIES or (token.isalpha() and len(token) == 3):
-                    ccy = token.upper()
-                    if ccy not in selected:
-                        selected.append(ccy)
-            if not selected:
-                print("  No valid currencies found — please try again.")
-
-        print(f"\nSelected: {', '.join(selected)}")
-        return selected
 
     def tool_schema(self) -> dict:
         return {
@@ -161,11 +145,7 @@ class FXIP(BloombergFunction):
                 "properties": {
                     "group": {
                         "type": "string",
-                        "description": (
-                            "Currency group: 'g10' (default), 'em', 'all', or 'custom'. "
-                            "Use 'custom' together with the 'currencies' field to specify "
-                            "an arbitrary list."
-                        ),
+                        "description": "Currency group: 'g10' (default), 'em', 'all', or 'custom'.",
                         "enum": ["g10", "em", "all", "custom"],
                         "default": "g10",
                     },
@@ -178,7 +158,7 @@ class FXIP(BloombergFunction):
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "Explicit list of base currency ISO codes to display. "
+                            "Explicit list of base currency ISO codes. "
                             "Only used when group='custom', e.g. ['EUR', 'GBP', 'SGD']."
                         ),
                     },

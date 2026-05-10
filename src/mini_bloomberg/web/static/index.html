@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MINI-BLOOMBERG // Web Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0a0a;
+    --bg2:       #111111;
+    --bg3:       #181818;
+    --bg4:       #222222;
+    --border:    #2a2a2a;
+    --border2:   #333333;
+    --yellow:    #ffaf00;
+    --yellow2:   #cc8800;
+    --green:     #00e676;
+    --green2:    #00c853;
+    --cyan:      #00b8d4;
+    --red:       #ff5252;
+    --text:      #e0e0e0;
+    --text2:     #aaaaaa;
+    --text3:     #666666;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+    --sidebar-w: 200px;
+    --agent-w:   280px;
+    --header-h:  50px;
+    --cmd-h:     52px;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    height: var(--header-h);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--yellow2);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 0;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  #topbar-logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--yellow);
+    white-space: nowrap;
+    padding-right: 16px;
+    border-right: 1px solid var(--border2);
+    margin-right: 12px;
+  }
+
+  #topbar-subtitle {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    flex: 1;
+  }
+
+  #topbar-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+
+  #topbar-meta span { color: var(--text2); }
+
+  /* ── COMMAND BAR ── */
+  #cmdbar {
+    height: var(--cmd-h);
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  #cmdbar-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--yellow);
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  #cmd-input-wrap {
+    flex: 1;
+    position: relative;
+  }
+
+  #cmd-input {
+    width: 100%;
+    background: var(--bg4);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 8px 14px;
+    outline: none;
+    letter-spacing: 0.5px;
+    transition: border-color 0.15s;
+  }
+
+  #cmd-input:focus {
+    border-color: var(--yellow);
+  }
+
+  #cmd-input::placeholder { color: var(--text3); font-size: 12px; }
+
+  #cmd-hint {
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  #autocomplete {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-top: none;
+    z-index: 200;
+    display: none;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .ac-item {
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .ac-item:hover, .ac-item.active {
+    background: var(--bg4);
+    color: var(--yellow);
+  }
+
+  .ac-cmd { color: var(--yellow); font-weight: 600; min-width: 80px; }
+  .ac-desc { color: var(--text3); font-size: 11px; }
+
+  /* ── MAIN LAYOUT ── */
+  #main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    padding: 0 16px 8px;
+    display: block;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.8px;
+    transition: all 0.1s;
+    border-left: 2px solid transparent;
+  }
+
+  .sidebar-item:hover { color: var(--text); background: var(--bg3); }
+
+  .sidebar-item.active {
+    color: var(--yellow);
+    border-left-color: var(--yellow);
+    background: var(--bg3);
+  }
+
+  .sidebar-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text3);
+    flex-shrink: 0;
+  }
+
+  .sidebar-item.active .sidebar-dot { background: var(--yellow); }
+  .sidebar-item:hover .sidebar-dot { background: var(--text2); }
+
+  /* Function tabs */
+  .fn-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 12px;
+    flex-wrap: wrap;
+  }
+
+  .fn-tab {
+    font-size: 10px;
+    color: var(--text3);
+    padding: 5px 8px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.1s;
+  }
+
+  .fn-tab:hover { color: var(--text); }
+  .fn-tab.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+
+  /* ── RESULT PANEL ── */
+  #result-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #result-tabs {
+    height: 36px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 16px;
+    gap: 0;
+    flex-shrink: 0;
+  }
+
+  .rtab {
+    font-size: 10px;
+    color: var(--text3);
+    padding: 6px 14px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.1s;
+  }
+
+  .rtab:hover { color: var(--text); }
+  .rtab.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+
+  #result-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    position: relative;
+  }
+
+  /* Output styles */
+  #output {
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.6;
+    min-height: 100%;
+  }
+
+  .output-block {
+    margin-bottom: 20px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .output-header {
+    color: var(--yellow);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .output-ticker {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--yellow);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .output-subtitle {
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 16px;
+  }
+
+  .kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 14px;
+    background: var(--bg2);
+    font-size: 12px;
+  }
+
+  .kv-key { color: var(--text2); font-size: 11px; }
+  .kv-val { color: var(--text); font-weight: 500; }
+  .kv-val.up { color: var(--green); }
+  .kv-val.down { color: var(--red); }
+  .kv-val.gold { color: var(--yellow); }
+
+  .output-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .output-table th {
+    background: var(--bg3);
+    color: var(--text3);
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border2);
+  }
+  .output-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+  }
+  .output-table tr:hover td { background: var(--bg3); }
+  .output-table td:first-child { color: var(--text); }
+
+  .cmd-echo {
+    color: var(--text3);
+    font-size: 10px;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .cmd-echo::before { content: 'MINI-BB> '; color: var(--yellow); font-weight: 700; }
+
+  .output-error {
+    color: var(--red);
+    background: rgba(255,82,82,0.08);
+    border: 1px solid rgba(255,82,82,0.2);
+    padding: 10px 14px;
+    font-size: 12px;
+    border-radius: 2px;
+  }
+
+  .output-success {
+    color: var(--green);
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
+  .welcome-screen {
+    padding: 32px 16px;
+    text-align: center;
+  }
+
+  .welcome-logo {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--yellow);
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+  }
+
+  .welcome-sub {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    margin-bottom: 32px;
+  }
+
+  .welcome-help {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: left;
+  }
+
+  .help-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .help-card:hover { border-color: var(--yellow); }
+
+  .help-card-cmd {
+    color: var(--yellow);
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .help-card-desc {
+    color: var(--text3);
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  /* Loading */
+  .loading-line {
+    color: var(--text3);
+    font-size: 11px;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--border2);
+    border-top-color: var(--yellow);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── AGENT PANEL ── */
+  #agent-panel {
+    width: var(--agent-w);
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #agent-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  #agent-header-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  #agent-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 2px;
+  }
+
+  #agent-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .agent-msg {
+    font-size: 11px;
+    line-height: 1.6;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .agent-msg-user {
+    color: var(--text2);
+    background: var(--bg3);
+    border-left: 2px solid var(--yellow);
+    padding: 8px 10px;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .agent-msg-assistant {
+    color: var(--text);
+    padding: 2px 0;
+  }
+
+  .agent-msg-thinking {
+    color: var(--cyan);
+    font-size: 10px;
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .agent-msg-tool {
+    color: var(--text3);
+    font-size: 10px;
+    padding: 4px 8px;
+    background: var(--bg3);
+    border-left: 1px solid var(--border2);
+  }
+
+  .agent-msg-tool::before { content: '↳ '; color: var(--cyan); }
+
+  #agent-input-area {
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    flex-shrink: 0;
+  }
+
+  #agent-input-wrap {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+  }
+
+  #agent-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 10px;
+    outline: none;
+    resize: none;
+    line-height: 1.5;
+    min-height: 36px;
+    max-height: 100px;
+  }
+
+  #agent-input:focus { border-color: var(--cyan); }
+  #agent-input::placeholder { color: var(--text3); font-size: 10px; }
+
+  #agent-send {
+    background: var(--cyan);
+    border: none;
+    color: #000;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 7px 12px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    height: 36px;
+  }
+
+  #agent-send:hover { opacity: 0.85; }
+  #agent-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #agent-hint {
+    font-size: 9px;
+    color: var(--text3);
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+  }
+
+  /* Clock */
+  #clock {
+    font-size: 11px;
+    color: var(--text2);
+    letter-spacing: 1px;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* Status bar */
+  #statusbar {
+    height: 22px;
+    background: var(--bg3);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 16px;
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+
+  #statusbar .sb-item { display: flex; gap: 4px; }
+  #statusbar .sb-label { color: var(--text3); }
+  #statusbar .sb-val { color: var(--text2); }
+  #statusbar .sb-val.active { color: var(--green); }
+
+  /* iframe for RPT */
+  #rpt-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: none;
+  }
+
+  .section-divider {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .badge-buy { background: rgba(0,230,118,0.15); color: var(--green); }
+  .badge-sell { background: rgba(255,82,82,0.15); color: var(--red); }
+  .badge-hold { background: rgba(255,175,0,0.15); color: var(--yellow); }
+
+  .price-up { color: var(--green); }
+  .price-down { color: var(--red); }
+  .price-arrow-up::before { content: '▲ '; }
+  .price-arrow-down::before { content: '▼ '; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div id="topbar-logo">MINI-BLOOMBERG</div>
+  <div id="topbar-subtitle">// WEB TERMINAL</div>
+  <div id="topbar-meta">
+    <span>OpenBB · FMP · Claude</span>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- COMMAND BAR -->
+<div id="cmdbar">
+  <div id="cmdbar-label">MINI-BB&gt;</div>
+  <div id="cmd-input-wrap">
+    <input id="cmd-input" type="text" autocomplete="off" spellcheck="false"
+      placeholder="AAPL US Equity   |   DES   |   FA   |   GP   |   ANR   |   COMP   |   ? ask AI...">
+    <div id="autocomplete"></div>
+  </div>
+  <span id="cmd-hint">Press ENTER or type &lt;GO&gt; to execute</span>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <span class="sidebar-label">ASSET CLASS</span>
+      <div class="sidebar-item active" data-asset="EQUITY">
+        <div class="sidebar-dot"></div>EQUITY
+      </div>
+      <div class="sidebar-item" data-asset="FIXED INC.">
+        <div class="sidebar-dot"></div>FIXED INC.
+      </div>
+      <div class="sidebar-item" data-asset="FX">
+        <div class="sidebar-dot"></div>FX
+      </div>
+      <div class="sidebar-item" data-asset="COMMODITIES">
+        <div class="sidebar-dot"></div>COMMODITIES
+      </div>
+      <div class="sidebar-item" data-asset="FUNDS">
+        <div class="sidebar-dot"></div>FUNDS
+      </div>
+      <div class="sidebar-item" data-asset="NEWS">
+        <div class="sidebar-dot"></div>NEWS
+      </div>
+      <div class="sidebar-item" data-asset="INDEX">
+        <div class="sidebar-dot"></div>INDEX
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-label">FUNCTIONS</span>
+      <div class="fn-tabs" id="fn-tabs">
+        <div class="fn-tab active" data-fn="DES">DES</div>
+        <div class="fn-tab" data-fn="FA">FA</div>
+        <div class="fn-tab" data-fn="GP">GP</div>
+        <div class="fn-tab" data-fn="ANR">ANR</div>
+        <div class="fn-tab" data-fn="COMP">COMP</div>
+        <div class="fn-tab" data-fn="RV">RV</div>
+        <div class="fn-tab" data-fn="RPT">RPT</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-label">FX FUNCTIONS</span>
+      <div class="fn-tabs">
+        <div class="fn-tab" data-fn="FXIP">FXIP</div>
+        <div class="fn-tab" data-fn="FXCA">FXCA</div>
+        <div class="fn-tab" data-fn="FXHV">FXHV</div>
+        <div class="fn-tab" data-fn="FRD">FRD</div>
+        <div class="fn-tab" data-fn="WCR">WCR</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-label">HISTORY</span>
+      <div id="sidebar-history" style="font-size:10px; padding: 4px 0;"></div>
+    </div>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div id="result-panel">
+    <div id="result-tabs">
+      <div class="rtab active" data-tab="output">OUTPUT</div>
+      <div class="rtab" data-tab="raw">RAW DATA</div>
+    </div>
+    <div id="result-body">
+      <div id="output">
+        <div class="welcome-screen">
+          <div class="welcome-logo">MINI-BLOOMBERG</div>
+          <div class="welcome-sub">// EQUITY ANALYSIS TERMINAL — POWERED BY OPENBB · FMP · CLAUDE</div>
+          <div class="welcome-help" id="welcome-help">
+            <div class="help-card" onclick="setCmd('AAPL US Equity')">
+              <div class="help-card-cmd">AAPL US Equity</div>
+              <div class="help-card-desc">Load Apple Inc. equity</div>
+            </div>
+            <div class="help-card" onclick="setCmd('DES')">
+              <div class="help-card-cmd">DES &lt;GO&gt;</div>
+              <div class="help-card-desc">Company description & key stats</div>
+            </div>
+            <div class="help-card" onclick="setCmd('FA')">
+              <div class="help-card-cmd">FA &lt;GO&gt;</div>
+              <div class="help-card-desc">Financial analysis (Income/BS/CF)</div>
+            </div>
+            <div class="help-card" onclick="setCmd('GP')">
+              <div class="help-card-cmd">GP &lt;GO&gt;</div>
+              <div class="help-card-desc">Price chart (default 1 year)</div>
+            </div>
+            <div class="help-card" onclick="setCmd('ANR')">
+              <div class="help-card-cmd">ANR &lt;GO&gt;</div>
+              <div class="help-card-desc">Analyst ratings & price targets</div>
+            </div>
+            <div class="help-card" onclick="setCmd('COMP')">
+              <div class="help-card-cmd">COMP &lt;GO&gt;</div>
+              <div class="help-card-desc">Comparable companies</div>
+            </div>
+            <div class="help-card" onclick="setCmd('RPT')">
+              <div class="help-card-cmd">RPT &lt;GO&gt;</div>
+              <div class="help-card-desc">Full equity report (HTML)</div>
+            </div>
+            <div class="help-card" onclick="setCmd('? compare AAPL and MSFT margins')">
+              <div class="help-card-cmd">? ask the AI agent</div>
+              <div class="help-card-desc">Natural language queries</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <iframe id="rpt-frame" title="Equity Report"></iframe>
+      <pre id="raw-output" style="display:none; padding:16px; font-size:11px; color:var(--text2); white-space:pre-wrap; overflow-wrap:break-word;"></pre>
+    </div>
+  </div>
+
+  <!-- AGENT PANEL -->
+  <div id="agent-panel">
+    <div id="agent-header">
+      <div id="agent-header-dot"></div>
+      <div id="agent-title">CLAUDE AGENT</div>
+    </div>
+    <div id="agent-messages">
+      <div class="agent-msg agent-msg-thinking" style="animation:none;">
+        <div class="spinner"></div>
+        <span>Ready. Ask me about any security.</span>
+      </div>
+    </div>
+    <div id="agent-input-area">
+      <div id="agent-hint">Prefix with ? in command bar, or type here</div>
+      <div id="agent-input-wrap">
+        <textarea id="agent-input" rows="2"
+          placeholder="Why has AAPL outperformed MSFT?"></textarea>
+        <button id="agent-send">ASK</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <div class="sb-item"><span class="sb-label">TICKER</span><span class="sb-val" id="sb-ticker">—</span></div>
+  <div class="sb-item"><span class="sb-label">STATUS</span><span class="sb-val active" id="sb-status">READY</span></div>
+  <div class="sb-item"><span class="sb-label">CMD</span><span class="sb-val" id="sb-cmd">—</span></div>
+  <div class="sb-item"><span class="sb-label">API</span><span class="sb-val" id="sb-api">—</span></div>
+  <div style="margin-left:auto;" class="sb-item"><span class="sb-val">MINI-BLOOMBERG v0.1 // WEB UI</span></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+const state = {
+  loadedTicker: null,
+  activeTab: 'output',
+  agentHistory: [],
+  apiBase: window.location.origin, // FastAPI backend at same origin
+  lastResult: null,
+};
+
+const CMDS = [
+  { cmd: 'DES',  desc: 'Company description & key stats' },
+  { cmd: 'FA',   desc: 'Financial analysis (Income / Balance / CF)' },
+  { cmd: 'GP',   desc: 'Price chart (default 1 year)' },
+  { cmd: 'ANR',  desc: 'Analyst ratings & price targets' },
+  { cmd: 'COMP', desc: 'Comparable companies side-by-side' },
+  { cmd: 'RPT',  desc: 'Full equity report (HTML)' },
+  { cmd: 'RV',   desc: 'Relative value vs. peers' },
+  { cmd: 'FXIP', desc: 'FX spot monitor: G10/EM vs USD' },
+  { cmd: 'FXCA', desc: 'FX calculator: convert between currencies' },
+  { cmd: 'FXHV', desc: 'FX historical volatility (multi-window)' },
+  { cmd: 'FRD',  desc: 'FX forward rate curve (CIP-implied)' },
+  { cmd: 'WCR',  desc: 'World currency ranker by performance' },
+  { cmd: 'HELP', desc: 'Show all commands' },
+];
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', { hour12: false }) + ' LOCAL';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Autocomplete ───────────────────────────────────────────────────────────────
+const cmdInput = document.getElementById('cmd-input');
+const acBox = document.getElementById('autocomplete');
+let acIdx = -1;
+let acItems = [];
+
+cmdInput.addEventListener('input', () => {
+  const val = cmdInput.value.trim().toUpperCase();
+  acItems = [];
+  if (!val || val.startsWith('?')) { acBox.style.display = 'none'; return; }
+
+  // Match commands
+  const matches = CMDS.filter(c => c.cmd.startsWith(val));
+
+  // Ticker suffixes
+  const suffixes = ['US Equity', 'HK Equity', 'JP Equity', 'LN Equity', 'FP Equity', 'GR Equity', 'SP Equity'];
+  if (val.length >= 1 && val.length <= 6 && /^[A-Z0-9]+$/.test(val)) {
+    suffixes.forEach(s => acItems.push({ cmd: val + ' ' + s, desc: 'Load security' }));
+  }
+  acItems = [...matches, ...acItems].slice(0, 8);
+
+  if (!acItems.length) { acBox.style.display = 'none'; return; }
+
+  acBox.innerHTML = acItems.map((it, i) =>
+    `<div class="ac-item" data-i="${i}">
+      <span class="ac-cmd">${it.cmd}</span>
+      <span class="ac-desc">${it.desc}</span>
+    </div>`
+  ).join('');
+  acBox.style.display = 'block';
+  acIdx = -1;
+
+  acBox.querySelectorAll('.ac-item').forEach(el => {
+    el.addEventListener('click', () => {
+      cmdInput.value = el.querySelector('.ac-cmd').textContent;
+      acBox.style.display = 'none';
+      cmdInput.focus();
+    });
+  });
+});
+
+cmdInput.addEventListener('keydown', e => {
+  if (acBox.style.display === 'block') {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      acIdx = Math.min(acIdx + 1, acItems.length - 1);
+      highlightAC();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      acIdx = Math.max(acIdx - 1, -1);
+      highlightAC();
+    } else if (e.key === 'Tab' || (e.key === 'Enter' && acIdx >= 0)) {
+      e.preventDefault();
+      if (acIdx >= 0) {
+        cmdInput.value = acItems[acIdx].cmd;
+        acBox.style.display = 'none';
+      }
+      return;
+    } else if (e.key === 'Escape') {
+      acBox.style.display = 'none'; return;
+    }
+  }
+  if (e.key === 'Enter') {
+    acBox.style.display = 'none';
+    executeCommand(cmdInput.value);
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#cmd-input-wrap')) acBox.style.display = 'none';
+});
+
+function highlightAC() {
+  acBox.querySelectorAll('.ac-item').forEach((el, i) => {
+    el.classList.toggle('active', i === acIdx);
+  });
+  if (acIdx >= 0) cmdInput.value = acItems[acIdx].cmd;
+}
+
+// ── Sidebar ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.sidebar-item[data-asset]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar-item[data-asset]').forEach(x => x.classList.remove('active'));
+    el.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.fn-tab[data-fn]').forEach(el => {
+  el.addEventListener('click', () => {
+    const fn = el.dataset.fn;
+    cmdInput.value = fn;
+    cmdInput.focus();
+  });
+});
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.rtab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const t = tab.dataset.tab;
+    document.querySelectorAll('.rtab').forEach(x => x.classList.remove('active'));
+    tab.classList.add('active');
+    state.activeTab = t;
+
+    const output = document.getElementById('output');
+    const raw = document.getElementById('raw-output');
+    const frame = document.getElementById('rpt-frame');
+
+    if (t === 'output') {
+      output.style.display = 'block';
+      raw.style.display = 'none';
+      frame.style.display = 'none';
+    } else if (t === 'raw') {
+      output.style.display = 'none';
+      raw.style.display = 'block';
+      frame.style.display = 'none';
+    }
+  });
+});
+
+// ── Helper: set command bar ────────────────────────────────────────────────────
+function setCmd(text) {
+  cmdInput.value = text;
+  cmdInput.focus();
+}
+
+// ── Output rendering ───────────────────────────────────────────────────────────
+function showOutput(html) {
+  const out = document.getElementById('output');
+  out.innerHTML = html;
+  document.getElementById('output').style.display = 'block';
+  document.getElementById('rpt-frame').style.display = 'none';
+  document.getElementById('raw-output').style.display = 'none';
+}
+
+function showLoading(cmd) {
+  showOutput(`<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="loading-line"><div class="spinner"></div> Fetching data for <span style="color:var(--yellow)">${escHtml(cmd)}</span>…</div>
+  </div>`);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmt(v, currency='') {
+  if (v == null) return 'N/A';
+  const sym = { USD:'$', EUR:'€', GBP:'£', JPY:'¥', HKD:'HK$', SGD:'S$', AUD:'A$' }[currency] || (currency ? currency+' ' : '');
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1e12) return `${s}${sym}${(a/1e12).toFixed(2)}T`;
+  if (a >= 1e9)  return `${s}${sym}${(a/1e9).toFixed(1)}B`;
+  if (a >= 1e6)  return `${s}${sym}${(a/1e6).toFixed(1)}M`;
+  return `${s}${sym}${a.toLocaleString()}`;
+}
+
+function fmtPct(v) { return v == null ? 'N/A' : `${(v*100).toFixed(1)}%`; }
+function fmtX(v)   { return v == null ? 'N/A' : `${v.toFixed(1)}x`; }
+
+// ── Render functions ───────────────────────────────────────────────────────────
+
+function renderDES(data, cmd) {
+  const d = data.data || {};
+  const cur = d.currency || '';
+  const price = d.price != null ? d.price : d.last_price;
+  const change = d.change_pct;
+  const changeHtml = change != null
+    ? `<span class="${change >= 0 ? 'price-up price-arrow-up' : 'price-down price-arrow-down'}">${Math.abs(change).toFixed(2)}%</span>`
+    : '';
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-ticker">${escHtml(d.symbol || d.ticker || '')}</div>
+    <div class="output-subtitle">${escHtml([d.name, d.exchange, d.sector, cur].filter(Boolean).join(' · '))}</div>
+    <div class="kv-grid">
+      <div class="kv-row"><span class="kv-key">Market Cap</span><span class="kv-val gold">${fmt(d.market_cap, cur)}</span></div>
+      <div class="kv-row"><span class="kv-key">Last Price</span><span class="kv-val">${price != null ? (cur === 'JPY' ? `¥${price.toLocaleString()}` : `${cur==='USD'?'$':''}${price.toLocaleString()}`) : 'N/A'} ${changeHtml}</span></div>
+      <div class="kv-row"><span class="kv-key">P/E Ratio</span><span class="kv-val">${fmtX(d.pe_ratio)}</span></div>
+      <div class="kv-row"><span class="kv-key">EV/EBITDA</span><span class="kv-val">${fmtX(d.ev_to_ebitda)}</span></div>
+      <div class="kv-row"><span class="kv-key">Sector</span><span class="kv-val">${escHtml(d.sector||'N/A')}</span></div>
+      <div class="kv-row"><span class="kv-key">Exchange</span><span class="kv-val">${escHtml(d.exchange||'N/A')}</span></div>
+      <div class="kv-row"><span class="kv-key">Employees</span><span class="kv-val">${d.employees != null ? d.employees.toLocaleString() : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Beta</span><span class="kv-val">${d.beta != null ? d.beta.toFixed(2) : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Div. Yield</span><span class="kv-val">${d.dividend_yield != null ? d.dividend_yield.toFixed(2)+'%' : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Country</span><span class="kv-val">${escHtml(d.country||'N/A')}</span></div>
+    </div>
+    ${d.description || d.long_description ? `<div style="color:var(--text2);font-size:11px;line-height:1.7;margin-top:8px;padding:10px;background:var(--bg2);border-left:2px solid var(--yellow2);">${escHtml((d.description||d.long_description||'').slice(0,600))}${(d.description||d.long_description||'').length>600?'…':''}</div>` : ''}
+  </div>`;
+}
+
+function renderFA(data, cmd) {
+  const fin = (data.data || {});
+  const income = fin.income_statements || fin.income || [];
+  const cur = fin.currency || '';
+
+  if (!income.length) return renderGeneric(data, cmd);
+
+  const years = income.map(r => r.fiscal_year || r.year || '').reverse();
+  const rows_rev = [...income].reverse();
+
+  const metrics = [
+    ['Total Revenue',      'revenue',          v => fmt(v, cur)],
+    ['Gross Profit',       'gross_profit',      v => fmt(v, cur)],
+    ['Gross Margin',       'gross_margin',      fmtPct],
+    ['Operating Income',   'operating_income',  v => fmt(v, cur)],
+    ['EBITDA',             'ebitda',            v => fmt(v, cur)],
+    ['Net Income',         'net_income',        v => fmt(v, cur)],
+    ['Net Margin',         'net_margin',        fmtPct],
+    ['EPS (Diluted)',      'eps_diluted',       v => v != null ? `${cur==='USD'?'$':''}${v.toFixed(2)}` : 'N/A'],
+  ];
+
+  const thead = `<tr><th>Metric</th>${years.map(y => `<th style="text-align:right">${escHtml(String(y))}</th>`).join('')}</tr>`;
+  const tbody = metrics.map(([label, key, fmtFn]) => {
+    const cells = rows_rev.map(r => {
+      const v = r[key];
+      return `<td style="text-align:right">${fmtFn(v)}</td>`;
+    }).join('');
+    return `<tr><td>${label}</td>${cells}</tr>`;
+  }).join('');
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">FINANCIAL ANALYSIS — ${escHtml(cur)}</div>
+    <table class="output-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+  </div>`;
+}
+
+function renderANR(data, cmd) {
+  const d = data.data || {};
+  const pt = d.price_target || {};
+  const ratings = d.ratings || [];
+  const rating = d.consensus_rating || '';
+  const ratingCls = { buy:'badge-buy', 'strong buy':'badge-buy', sell:'badge-sell', 'strong sell':'badge-sell', hold:'badge-hold' }[rating.toLowerCase()] || '';
+
+  let html = `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">ANALYST RATINGS & PRICE TARGETS</div>
+    <div class="kv-grid">
+      <div class="kv-row"><span class="kv-key">Consensus</span><span class="kv-val"><span class="badge ${ratingCls}">${escHtml(rating||'N/A')}</span></span></div>
+      <div class="kv-row"><span class="kv-key"># Analysts</span><span class="kv-val">${d.num_analysts||'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Target (Consensus)</span><span class="kv-val gold">${pt.target_consensus != null ? '$'+pt.target_consensus.toFixed(2) : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Target High</span><span class="kv-val up">${pt.target_high != null ? '$'+pt.target_high.toFixed(2) : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Target Low</span><span class="kv-val down">${pt.target_low != null ? '$'+pt.target_low.toFixed(2) : 'N/A'}</span></div>
+      <div class="kv-row"><span class="kv-key">Buy</span><span class="kv-val up">${(d.strong_buy||0)+(d.buy||0)}</span></div>
+      <div class="kv-row"><span class="kv-key">Hold</span><span class="kv-val">${d.hold||0}</span></div>
+      <div class="kv-row"><span class="kv-key">Sell</span><span class="kv-val down">${(d.sell||0)+(d.strong_sell||0)}</span></div>
+    </div>`;
+
+  if (ratings.length) {
+    html += `<div class="section-divider">RECENT RATINGS</div>
+    <table class="output-table">
+      <thead><tr><th>Date</th><th>Analyst</th><th>Rating</th><th style="text-align:right">Target</th></tr></thead>
+      <tbody>${ratings.slice(0,10).map(r => {
+        const rc = r.rating_current||r.rating||'';
+        const rcls = { buy:'badge-buy','strong buy':'badge-buy',sell:'badge-sell','strong sell':'badge-sell',hold:'badge-hold' }[rc.toLowerCase()] || '';
+        return `<tr>
+          <td>${escHtml(r.date||'')}</td>
+          <td>${escHtml(r.analyst_company||r.analyst||'')}</td>
+          <td><span class="badge ${rcls}">${escHtml(rc)}</span></td>
+          <td style="text-align:right">${r.price_target != null ? '$'+r.price_target.toFixed(2) : 'N/A'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderCOMP(data, cmd) {
+  const peers = data.data?.peers || data.data || [];
+  if (!Array.isArray(peers) || !peers.length) return renderGeneric(data, cmd);
+
+  const thead = `<tr><th>Ticker</th><th>Company</th><th style="text-align:right">Mkt Cap</th><th style="text-align:right">P/E</th><th style="text-align:right">EV/EBITDA</th><th style="text-align:right">Gross Mgn</th><th style="text-align:right">Net Mgn</th></tr>`;
+  const tbody = peers.map(p => {
+    const pc = p.currency || '';
+    return `<tr>
+      <td style="color:var(--yellow)">${escHtml(p.symbol||'')}</td>
+      <td>${escHtml((p.name||'').slice(0,24))}</td>
+      <td style="text-align:right">${fmt(p.market_cap, pc)}</td>
+      <td style="text-align:right">${fmtX(p.pe_ratio)}</td>
+      <td style="text-align:right">${fmtX(p.ev_to_ebitda||p.evebitda)}</td>
+      <td style="text-align:right">${p.gross_margin != null ? (p.gross_margin*100 > 1 ? p.gross_margin.toFixed(1)+'%' : (p.gross_margin*100).toFixed(1)+'%') : 'N/A'}</td>
+      <td style="text-align:right">${p.net_margin != null ? (p.net_margin*100 > 1 ? p.net_margin.toFixed(1)+'%' : (p.net_margin*100).toFixed(1)+'%') : 'N/A'}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">COMPARABLE COMPANIES</div>
+    <table class="output-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+  </div>`;
+}
+
+function renderFXIP(data, cmd) {
+  const rates = data.data?.rates || data.data || [];
+  if (!Array.isArray(rates) || !rates.length) return renderGeneric(data, cmd);
+  const thead = `<tr><th>Pair</th><th style="text-align:right">Spot</th><th style="text-align:right">Chg</th><th style="text-align:right">1W</th></tr>`;
+  const tbody = rates.map(r => {
+    const c = r.change_pct;
+    const cls = c != null ? (c >= 0 ? 'price-up' : 'price-down') : '';
+    return `<tr>
+      <td style="color:var(--yellow)">${escHtml(r.pair||r.currency_pair||'')}</td>
+      <td style="text-align:right">${r.spot != null ? r.spot.toFixed(4) : 'N/A'}</td>
+      <td style="text-align:right" class="${cls}">${c != null ? (c>=0?'+':'')+c.toFixed(2)+'%' : 'N/A'}</td>
+      <td style="text-align:right">${r.change_1w != null ? (r.change_1w>=0?'+':'')+r.change_1w.toFixed(2)+'%' : 'N/A'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">FX SPOT MONITOR</div>
+    <table class="output-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+  </div>`;
+}
+
+function renderGeneric(data, cmd) {
+  const d = data.data || data;
+
+  const renderVal = (v, depth = 0) => {
+    if (v == null) return '<span style="color:var(--text3)">N/A</span>';
+    if (typeof v === 'boolean') return `<span style="color:var(--cyan)">${v}</span>`;
+    if (typeof v === 'number') return `<span style="color:var(--yellow)">${v.toLocaleString()}</span>`;
+    if (typeof v === 'string') return escHtml(v);
+    if (Array.isArray(v)) {
+      if (!v.length) return '<span style="color:var(--text3)">(empty)</span>';
+      if (typeof v[0] === 'object' && v[0] !== null) {
+        const keys = Object.keys(v[0]).slice(0, 6);
+        const thead = `<tr>${keys.map(k => `<th>${escHtml(k)}</th>`).join('')}</tr>`;
+        const tbody = v.slice(0, 20).map(row =>
+          `<tr>${keys.map(k => `<td>${renderVal(row[k], depth+1)}</td>`).join('')}</tr>`
+        ).join('');
+        return `<table class="output-table" style="margin-top:6px"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+      }
+      return `<span style="color:var(--text2)">${v.slice(0,10).map(x => escHtml(String(x))).join(', ')}${v.length>10?'…':''}</span>`;
+    }
+    if (typeof v === 'object') {
+      return `<div style="margin-left:${depth*12}px">` +
+        Object.entries(v).map(([k, val]) =>
+          `<div class="kv-row" style="padding:4px 0;background:transparent;">
+            <span class="kv-key">${escHtml(k)}</span>
+            <span class="kv-val">${renderVal(val, depth+1)}</span>
+          </div>`
+        ).join('') + '</div>';
+    }
+    return escHtml(String(v));
+  };
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">RESULT</div>
+    <div style="font-size:12px">${renderVal(d)}</div>
+  </div>`;
+}
+
+// ── Execute command ────────────────────────────────────────────────────────────
+async function executeCommand(raw) {
+  const line = raw.trim();
+  if (!line) return;
+  cmdInput.value = '';
+  acBox.style.display = 'none';
+
+  // Strip <GO>
+  let cmd = line.replace(/<GO>$/i, '').replace(/\bGO$/i, '').trim();
+  const upper = cmd.toUpperCase();
+
+  // Add to history
+  addHistory(cmd);
+
+  // Status
+  document.getElementById('sb-cmd').textContent = cmd;
+  document.getElementById('sb-status').textContent = 'RUNNING';
+  document.getElementById('sb-status').classList.remove('active');
+
+  // Agent query
+  if (cmd.startsWith('?')) {
+    const query = cmd.slice(1).trim();
+    handleAgentQuery(query);
+    return;
+  }
+
+  if (upper === 'HELP') {
+    showOutput(renderHelp());
+    document.getElementById('sb-status').textContent = 'OK';
+    document.getElementById('sb-status').classList.add('active');
+    return;
+  }
+
+  showLoading(cmd);
+
+  // Call backend API
+  try {
+    const res = await fetch(`${state.apiBase}/api/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: cmd }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showOutput(`<div class="output-block">
+        <div class="cmd-echo">${escHtml(cmd)}</div>
+        <div class="output-error">Error ${res.status}: ${escHtml(err.detail || 'Request failed')}</div>
+      </div>`);
+      document.getElementById('sb-status').textContent = 'ERROR';
+      return;
+    }
+
+    const data = await res.json();
+    state.lastResult = data;
+
+    // Update raw view
+    document.getElementById('raw-output').textContent = JSON.stringify(data, null, 2);
+
+    // Update status bar ticker
+    if (data.loaded_ticker) {
+      state.loadedTicker = data.loaded_ticker;
+      document.getElementById('sb-ticker').textContent = data.loaded_ticker;
+    }
+
+    document.getElementById('sb-api').textContent = data.provider || '—';
+    document.getElementById('sb-status').textContent = data.status === 'ok' ? 'OK' : 'ERROR';
+    document.getElementById('sb-status').classList.toggle('active', data.status === 'ok');
+
+    // Handle RPT (report HTML)
+    if (data.rpt_html || data.report_path) {
+      if (data.rpt_html) {
+        const frame = document.getElementById('rpt-frame');
+        frame.srcdoc = data.rpt_html;
+        frame.style.display = 'block';
+        document.getElementById('output').style.display = 'none';
+        document.getElementById('raw-output').style.display = 'none';
+      }
+      return;
+    }
+
+    if (data.status === 'error') {
+      showOutput(`<div class="output-block">
+        <div class="cmd-echo">${escHtml(cmd)}</div>
+        <div class="output-error">${escHtml(data.message || 'Command failed')}</div>
+      </div>`);
+      return;
+    }
+
+    // Determine which renderer to use
+    const parts = cmd.trim().split(/\s+/);
+    const fnCmd = parts[0].toUpperCase();
+
+    // Ticker load response
+    if (data.loaded_ticker && !['DES','FA','GP','ANR','COMP','RPT','RV','FXIP','FXCA','FXHV','FRD','WCR'].includes(fnCmd)) {
+      showOutput(`<div class="output-block">
+        <div class="cmd-echo">${escHtml(cmd)}</div>
+        <div class="output-success">✓ Loaded: ${escHtml(data.loaded_ticker)}</div>
+        ${data.data ? renderDES(data, cmd).replace('<div class="cmd-echo">'+escHtml(cmd)+'</div>','') : ''}
+      </div>`);
+      return;
+    }
+
+    let html = '';
+    switch (fnCmd) {
+      case 'DES':  html = renderDES(data, cmd); break;
+      case 'FA':   html = renderFA(data, cmd); break;
+      case 'ANR':  html = renderANR(data, cmd); break;
+      case 'COMP': html = renderCOMP(data, cmd); break;
+      case 'FXIP': html = renderFXIP(data, cmd); break;
+      default:     html = renderGeneric(data, cmd);
+    }
+    showOutput(html);
+
+  } catch (err) {
+    showOutput(`<div class="output-block">
+      <div class="cmd-echo">${escHtml(cmd)}</div>
+      <div class="output-error">
+        <strong>Connection error</strong> — could not reach the Mini-Bloomberg backend.<br><br>
+        <span style="color:var(--text3)">Make sure the FastAPI server is running on port 8000:</span><br>
+        <span style="color:var(--cyan)">uvicorn mini_bloomberg.web.server:app --reload</span><br><br>
+        <span style="color:var(--text3)">Raw error: ${escHtml(String(err))}</span>
+      </div>
+    </div>`);
+    document.getElementById('sb-status').textContent = 'DISCONNECTED';
+  }
+}
+
+// ── Help ───────────────────────────────────────────────────────────────────────
+function renderHelp() {
+  const rows = [
+    ['&lt;TICKER&gt; &lt;GO&gt;', 'Load a security into the session', 'AAPL US Equity &lt;GO&gt;'],
+    ['DES &lt;GO&gt;', 'Company description and key stats', 'DES &lt;GO&gt;'],
+    ['FA &lt;GO&gt;', 'Financial analysis (income/balance/CF)', 'FA &lt;GO&gt;'],
+    ['GP &lt;GO&gt;', 'Price chart (default 1 year)', 'GP --days 90 &lt;GO&gt;'],
+    ['ANR &lt;GO&gt;', 'Analyst ratings and price targets', 'ANR &lt;GO&gt;'],
+    ['COMP &lt;GO&gt;', 'Comparable companies side-by-side', 'COMP &lt;GO&gt;'],
+    ['RPT &lt;GO&gt;', 'Full equity report (HTML)', 'RPT &lt;GO&gt;'],
+    ['RV &lt;GO&gt;', 'Relative value vs. peers', 'RV &lt;GO&gt;'],
+    ['FXIP &lt;GO&gt;', 'FX spot monitor: G10/EM vs USD', 'FXIP --group em &lt;GO&gt;'],
+    ['FXCA &lt;GO&gt;', 'FX calculator', 'FXCA --from USD --to JPY --amount 1000 &lt;GO&gt;'],
+    ['FXHV &lt;GO&gt;', 'FX historical volatility', 'FXHV --base EUR --quote USD &lt;GO&gt;'],
+    ['FRD &lt;GO&gt;', 'FX forward rate curve', 'FRD --base EUR --quote USD &lt;GO&gt;'],
+    ['WCR &lt;GO&gt;', 'World currency ranker', 'WCR --group g10 --sort-by 1m &lt;GO&gt;'],
+    ['? &lt;query&gt;', 'Ask the AI analyst', '? compare NVDA and AMD margins'],
+  ];
+  const tbody = rows.map(([cmd, desc, ex]) =>
+    `<tr><td style="color:var(--yellow);white-space:nowrap">${cmd}</td><td>${desc}</td><td style="color:var(--cyan);white-space:nowrap">${ex}</td></tr>`
+  ).join('');
+  return `<div class="output-block">
+    <div class="output-header">HELP — MINI-BLOOMBERG COMMANDS</div>
+    <table class="output-table">
+      <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+const cmdHistory = [];
+function addHistory(cmd) {
+  if (!cmd || cmdHistory[0] === cmd) return;
+  cmdHistory.unshift(cmd);
+  if (cmdHistory.length > 20) cmdHistory.pop();
+  const el = document.getElementById('sidebar-history');
+  el.innerHTML = cmdHistory.slice(0, 8).map(c =>
+    `<div class="sidebar-item" style="font-size:10px;padding:4px 16px;" onclick="setCmd('${c.replace(/'/g,"\\'")}')">
+      <div class="sidebar-dot"></div>${escHtml(c)}
+    </div>`
+  ).join('');
+}
+
+// ── Agent panel ────────────────────────────────────────────────────────────────
+function appendAgentMsg(type, text) {
+  const msgs = document.getElementById('agent-messages');
+  const div = document.createElement('div');
+  div.className = `agent-msg agent-msg-${type}`;
+
+  if (type === 'thinking') {
+    div.innerHTML = `<span class="spinner"></span> <span>${escHtml(text)}</span>`;
+  } else if (type === 'tool') {
+    div.innerHTML = escHtml(text);
+  } else {
+    div.textContent = text;
+  }
+
+  // Remove thinking if adding assistant
+  if (type === 'assistant') {
+    msgs.querySelectorAll('.agent-msg-thinking').forEach(el => el.remove());
+  }
+
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function handleAgentQuery(query) {
+  if (!query) return;
+  appendAgentMsg('user', query);
+  const thinkEl = appendAgentMsg('thinking', 'Analyzing…');
+
+  document.getElementById('sb-status').textContent = 'AGENT';
+
+  try {
+    const res = await fetch(`${state.apiBase}/api/agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        history: state.agentHistory,
+        ticker: state.loadedTicker,
+      }),
+    });
+
+    if (!res.ok) {
+      thinkEl.remove();
+      appendAgentMsg('assistant', `Error: ${res.status} — could not reach agent endpoint.`);
+      return;
+    }
+
+    const data = await res.json();
+    thinkEl.remove();
+
+    if (data.tool_calls) {
+      data.tool_calls.forEach(tc => appendAgentMsg('tool', tc));
+    }
+
+    const reply = data.response || data.message || '(no response)';
+    appendAgentMsg('assistant', reply);
+
+    state.agentHistory.push({ role: 'user', content: query });
+    state.agentHistory.push({ role: 'assistant', content: reply });
+    if (state.agentHistory.length > 20) state.agentHistory = state.agentHistory.slice(-20);
+
+  } catch (err) {
+    thinkEl.remove();
+    appendAgentMsg('assistant',
+      `Cannot connect to backend. Start the FastAPI server:\nuvicorn mini_bloomberg.web.server:app --reload`
+    );
+  }
+
+  document.getElementById('sb-status').textContent = 'READY';
+  document.getElementById('sb-status').classList.add('active');
+}
+
+// Agent input
+document.getElementById('agent-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const q = document.getElementById('agent-input').value.trim();
+    if (q) {
+      document.getElementById('agent-input').value = '';
+      handleAgentQuery(q);
+    }
+  }
+});
+
+document.getElementById('agent-send').addEventListener('click', () => {
+  const q = document.getElementById('agent-input').value.trim();
+  if (q) {
+    document.getElementById('agent-input').value = '';
+    handleAgentQuery(q);
+  }
+});
+
+// Focus command bar on page load
+cmdInput.focus();
+</script>
+</body>
+</html>
