@@ -9,8 +9,8 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:        #0a0a0a;
-    --bg2:       #111111;
+    --bg:        #272424;
+    --bg2:       #252323;
     --bg3:       #181818;
     --bg4:       #222222;
     --border:    #2a2a2a;
@@ -28,7 +28,7 @@
     --sans:      'IBM Plex Sans', sans-serif;
     --sidebar-w: 200px;
     --agent-w:   280px;
-    --header-h:  50px;
+    --header-h:  55px;
     --cmd-h:     52px;
   }
 
@@ -56,8 +56,8 @@
   }
 
   #topbar-logo {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 20px;
+    font-weight: 600;
     letter-spacing: 2px;
     color: var(--yellow);
     white-space: nowrap;
@@ -67,9 +67,9 @@
   }
 
   #topbar-subtitle {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text3);
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
     flex: 1;
   }
 
@@ -78,7 +78,7 @@
     gap: 12px;
     font-size: 10px;
     color: var(--text3);
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
   }
 
   #topbar-meta span { color: var(--text2); }
@@ -91,12 +91,12 @@
     display: flex;
     align-items: center;
     padding: 0 16px;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
   #cmdbar-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--yellow);
     letter-spacing: 1px;
@@ -128,7 +128,7 @@
   #cmd-input::placeholder { color: var(--text3); font-size: 12px; }
 
   #cmd-hint {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text3);
     white-space: nowrap;
     letter-spacing: 0.5px;
@@ -190,9 +190,9 @@
   }
 
   .sidebar-label {
-    font-size: 9px;
+    font-size: 12px;
     color: var(--text3);
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     padding: 0 16px 8px;
     display: block;
   }
@@ -200,14 +200,14 @@
   .sidebar-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     padding: 8px 16px;
     cursor: pointer;
     font-size: 11px;
     color: var(--text3);
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     transition: all 0.1s;
-    border-left: 2px solid transparent;
+    border-left: 1px solid transparent;
   }
 
   .sidebar-item:hover { color: var(--text); background: var(--bg3); }
@@ -238,7 +238,7 @@
   }
 
   .fn-tab {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text3);
     padding: 5px 8px;
     cursor: pointer;
@@ -270,7 +270,7 @@
   }
 
   .rtab {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text3);
     padding: 6px 14px;
     cursor: pointer;
@@ -682,7 +682,7 @@
 <!-- TOP BAR -->
 <div id="topbar">
   <div id="topbar-logo">MINI-BLOOMBERG</div>
-  <div id="topbar-subtitle">// WEB TERMINAL</div>
+  <div id="topbar-subtitle">Web Terminal</div>
   <div id="topbar-meta">
     <span>OpenBB · FMP · Claude</span>
     <span id="clock">--:--:--</span>
@@ -694,7 +694,7 @@
   <div id="cmdbar-label">MINI-BB&gt;</div>
   <div id="cmd-input-wrap">
     <input id="cmd-input" type="text" autocomplete="off" spellcheck="false"
-      placeholder="AAPL US Equity   |   DES   |   FA   |   GP   |   ANR   |   COMP   |   ? ask AI...">
+      placeholder="AAPL US Equity | DES | FA | ? ask AI...">
     <div id="autocomplete"></div>
   </div>
   <span id="cmd-hint">Press ENTER or type &lt;GO&gt; to execute</span>
@@ -706,32 +706,32 @@
   <!-- SIDEBAR -->
   <div id="sidebar">
     <div class="sidebar-section">
-      <span class="sidebar-label">ASSET CLASS</span>
+      <span class="sidebar-label">Asset Classes</span>
       <div class="sidebar-item active" data-asset="EQUITY">
-        <div class="sidebar-dot"></div>EQUITY
+        <div class="sidebar-dot"></div>Equity
       </div>
       <div class="sidebar-item" data-asset="FIXED INC.">
-        <div class="sidebar-dot"></div>FIXED INC.
+        <div class="sidebar-dot"></div>Fixed INC.
       </div>
       <div class="sidebar-item" data-asset="FX">
-        <div class="sidebar-dot"></div>FX
+        <div class="sidebar-dot"></div>Foreign Exchange
       </div>
       <div class="sidebar-item" data-asset="COMMODITIES">
-        <div class="sidebar-dot"></div>COMMODITIES
+        <div class="sidebar-dot"></div>Commodities
       </div>
       <div class="sidebar-item" data-asset="FUNDS">
-        <div class="sidebar-dot"></div>FUNDS
+        <div class="sidebar-dot"></div>Funds
       </div>
       <div class="sidebar-item" data-asset="NEWS">
-        <div class="sidebar-dot"></div>NEWS
+        <div class="sidebar-dot"></div>News
       </div>
       <div class="sidebar-item" data-asset="INDEX">
-        <div class="sidebar-dot"></div>INDEX
+        <div class="sidebar-dot"></div>Index
       </div>
     </div>
 
     <div class="sidebar-section">
-      <span class="sidebar-label">FUNCTIONS</span>
+      <span class="sidebar-label">Equity Functions</span>
       <div class="fn-tabs" id="fn-tabs">
         <div class="fn-tab active" data-fn="DES">DES</div>
         <div class="fn-tab" data-fn="FA">FA</div>
@@ -744,7 +744,7 @@
     </div>
 
     <div class="sidebar-section">
-      <span class="sidebar-label">FX FUNCTIONS</span>
+      <span class="sidebar-label">Foreign Exchange Functions</span>
       <div class="fn-tabs">
         <div class="fn-tab" data-fn="FXIP">FXIP</div>
         <div class="fn-tab" data-fn="FXCA">FXCA</div>
@@ -770,7 +770,7 @@
       <div id="output">
         <div class="welcome-screen">
           <div class="welcome-logo">MINI-BLOOMBERG</div>
-          <div class="welcome-sub">// EQUITY ANALYSIS TERMINAL — POWERED BY OPENBB · FMP · CLAUDE</div>
+          <div class="welcome-sub">BUSINESS ANALYSIS TERMINAL</div>
           <div class="welcome-help" id="welcome-help">
             <div class="help-card" onclick="setCmd('AAPL US Equity')">
               <div class="help-card-cmd">AAPL US Equity</div>
