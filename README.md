@@ -44,7 +44,7 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 | `ANR` | Analyst Recommendations | Consensus target price + buy/hold/sell breakdown |
 | `COMP` | Comparables | Peer table: margins, EBITDA, debt, beta |
 | `RV` | Relative Value | Valuation multiples + margin comparison vs. peer group |
-| `RPT` | (custom) | Full investment-bank-style HTML equity report (opens in browser) |
+| `RPT` | (custom) | Full investment-bank-style HTML equity report with DCF valuation model (opens in browser) |
 
 **FX**
 
@@ -290,11 +290,22 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 | Data | US equities | Non-US equities |
 |---|---|---|
 | Company profile | OpenBB/yfinance | OpenBB/yfinance |
-| Financials | FMP `/stable/income-statement` etc. | OpenBB/yfinance |
+| Annual financials (FA/RPT) | FMP `/stable/income-statement` etc. | OpenBB/yfinance |
+| Quarterly financials (RPT XLSX) | OpenBB → SEC XBRL (`obb.equity.compare.company_facts`, provider `"sec"`) — no API key | yfinance `.quarterly_income_stmt` / `.quarterly_balance_sheet` |
 | Price history | FMP `/stable/historical-price-eod/full` | OpenBB/yfinance |
 | Price targets | FMP `/stable/price-target-consensus` | — |
 | Analyst ratings | OpenBB/yfinance consensus | OpenBB/yfinance |
 | Peers | FMP `/stable/stock-peers` | — |
+
+**DCF Valuation (RPT §5)**
+
+| Data | Source | Cache TTL |
+|---|---|---|
+| Risk-free rate (Rf) | US Treasury — 10-year constant-maturity yield | 4h |
+| Equity Risk Premium (ERP) | Damodaran `ctryprem.html` — US implied ERP | 24h |
+| Country Risk Premium (CRP) | Damodaran `ctryprem.html` — matched to company domicile | 24h |
+| Beta, market cap, shares | yfinance `ticker.info` (via OpenBB equity profile) | 24h |
+| FCFF inputs (EBIT, D&A, CapEx, NWC, interest) | FMP annual income statement + cash flow + balance sheet | 24h |
 
 **FX** — all functions use **yfinance only** (ticker format: `EURUSD=X`)
 
@@ -304,23 +315,6 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 | Historical OHLCV (FXHV/FRD) | yfinance 1–2y history | 1h |
 | Currency performance (WCR) | yfinance 1y history | 10 min |
 | Forward rates (FRD) | CIP formula + hardcoded approx. rates | 1h |
-
----
-
-## RV — Relative Value
-
-`RV <GO>` prints a side-by-side table of valuation multiples and profitability margins for the loaded ticker versus its auto-detected peer group.
-
-```
-MINI-BB> NVDA US Equity <GO>
-MINI-BB> RV <GO>
-
-  Ticker   P/E     EV/EBITDA   Gross Mgn   Net Mgn   FCF Yield
-  NVDA     54.2×   42.1×       74.6%       55.0%     1.8%
-  AMD      98.4×   52.3×       47.1%       5.9%      0.4%
-  INTC     —       —           33.8%       -17.1%    —
-  ...
-```
 
 ---
 
@@ -334,77 +328,35 @@ MINI-BB> RV <GO>
 |---|---|---|
 | 1 | Company Profile | Key identifiers, description, exchange info |
 | 2 | Insights | AI-generated "What happened?" + "Our thoughts"; compact analyst consensus + trading data (52w range, avg vol, beta, P/BV …) |
-| 3 | Financial Statements | 4-year income statement, balance sheet, cash flow — side-by-side annual columns |
+| 3 | Financial Statements | 4-year income statement, balance sheet, cash flow — side-by-side annual columns; XLSX download |
 | 4 | Financial Ratios | Profitability, leverage, efficiency — 4 years |
-| 5 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
-| 6 | Peer Comparison | Subject ticker highlighted in peer table |
+| 5 | Valuation | DCF fair value, WACC, upside %, terminal growth, risk-free rate — KPI strip + XLSX valuation model download |
+| 6 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
+| 7 | Peer Comparison | Subject ticker highlighted in peer table |
 
 The **Insights section** (§2) makes a silent call to `claude-haiku-4-5-20251001` with recent news headlines and financial summary — cached 24h per ticker. Right-hand column shows analyst consensus (rating pill, price target, upside %) and a trading data table derived from 1-year price history.
 
-Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS with Google Fonts loaded via CDN.
+The **Valuation section** (§5) runs a full DCF model on every `RPT` call and exposes a one-click **XLSX download** with four sheets:
 
----
+| Sheet | Content |
+|---|---|
+| DCF Projections | Historical FCFF (3–4 years) + 5-year projection; discount factors and PV of each FCFF |
+| WACC Derivation | Full CAPM build — Rf, β, ERP, CRP, Ke, Kd, capital structure weights, WACC |
+| Valuation Summary | Enterprise value bridge (PV FCFFs + terminal value → equity value → price per share); 5×5 sensitivity table (WACC × terminal growth) |
+| Limitations & Assumptions | All model assumptions, data sources, known limitations, and disclaimer |
 
-## FX Functions
+**DCF methodology** (follows [Damodaran](https://pages.stern.nyu.edu/~adamodar/) framework):
+- **FCFF** = EBIT × (1 − T) + D&A − ΔNWC − CapEx, from FMP annual statements
+- **Revenue projection**: 3–4 year historical CAGR, decayed 10% per year toward long-run growth
+- **WACC** via CAPM: Ke = Rf + β × (ERP + CRP); Kd = interest expense / total debt
+- **Risk-free rate**: live 10-year US Treasury yield (cached 4h)
+- **ERP & CRP**: live from Damodaran `ctryprem.html` (cached 24h); CRP is non-zero for non-US companies
+- **Terminal value**: Gordon Growth Model with 2.5% perpetuity growth rate
+- Sensitivity grid spans WACC ± 2% and terminal growth 1.5%–3.5%
 
-All FX functions require no API key — data comes from yfinance free tier.
+P/E ratios show **N/M** (not meaningful) when the absolute value exceeds 999× — e.g. near-zero EPS years.
 
-### FXIP — FX Spot Monitor
-
-```
-MINI-BB> FXIP <GO>               ← G10 vs USD
-MINI-BB> FXIP --group em <GO>    ← EM vs USD
-
-  Pair      Spot      Chg %    52W High   52W Low
-  EURUSD    1.0821    ▲ 0.42%  1.1214     1.0178
-  GBPUSD    1.3305    ▲ 0.18%  1.3434     1.2299
-  JPYUSD    0.0069    ▼ 0.31%  0.0072     0.0063
-  ...
-```
-
-### FXCA — FX Calculator
-
-```
-MINI-BB> FXCA --from USD --to JPY --amount 1000 <GO>
-
-  USD → JPY    Rate: 144.820000    1,000 USD = 144,820.0000 JPY
-```
-
-### FXHV — FX Historical Volatility
-
-```
-MINI-BB> FXHV --base EUR --quote USD <GO>
-
-  EURUSD Historical Volatility
-  10d: 7.23%   20d: 6.91%   30d: 7.04%   60d: 7.45%
-  90d: 7.62%  180d: 7.38%    1y: 7.55%
-```
-
-### FRD — FX Forward Rate Curve
-
-Rates computed via Covered Interest Parity. Uses approximate benchmark rates (not live OIS/SOFR).
-
-```
-MINI-BB> FRD --base EUR --quote USD <GO>
-
-  Tenor   Days   Forward     Fwd Points   Impl. Yield Diff
-  O/N        1   1.08200     -0.10 pips   -1.30%
-  1W         7   1.08175     -2.48 pips   -1.30%
-  1M        30   1.07962    -24.80 pips   -1.30%
-  ...
-```
-
-### WCR — World Currency Ranker
-
-```
-MINI-BB> WCR <GO>
-MINI-BB> WCR --group em --sort-by 1m <GO>
-
-  Currency   Spot      1D       1W       1M       3M      YTD
-  EUR        1.0821  ▲0.42%  ▲1.23%  ▲2.11%  ▲3.45%  ▲4.20%
-  GBP        1.3305  ▲0.18%  ▲0.91%  ▲1.55%  ▲2.80%  ▲3.10%
-  ...
-```
+Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS/JS with Google Fonts loaded via CDN.
 
 ---
 
@@ -449,17 +401,18 @@ Infra       uv, python-dotenv, pytest
 - **COMP for non-US**: FMP peer list is US-centric; non-US peers may be incomplete
 - **ANR for non-US**: price targets only available for US tickers via FMP
 - **Native currency in COMP**: non-US revenue displays in native currency, not USD-converted
+- **Bank / financial sector IS**: banks (e.g. HK-listed Chinese banks) use a different income statement structure — no Cost of Revenue, Gross Profit, Operating Income, or EBITDA. These fields show N/A. Net Interest Income and other bank-specific line items are not currently mapped.
+- **Semi-annual reporters**: companies that publish only H1 and annual results (e.g. Lenovo 00992 HK) will show data only for Q2 and the annual column in the XLSX download. Q1, Q3, Q4 cells are blank — this reflects the company's actual reporting cadence, not a data gap.
+- **Quarterly data availability**: yfinance may not capture the most recent quarterly interim report for some non-US tickers (observed: Q3 2025 missing for China Construction Bank 00939 HK). Data appears once yfinance ingests the filing.
+
+**DCF Valuation**
+- **Beta relevering**: uses raw yfinance beta (already levered); Damodaran unlevered/relevered beta is not applied
+- **Non-US tickers**: CRP is added to ERP, but the risk-free rate stays US 10Y Treasury — a local sovereign yield would be more appropriate
+- **Cyclical / loss-making companies**: negative historical FCFF (e.g. companies with large restructuring charges) propagates into projections; treat the output as directional only
+- **GAAP only**: no non-GAAP adjustments — stock-based compensation, restructuring costs, and acquired-intangible amortisation are not stripped out
+- **Data source fallback**: if the US Treasury or Damodaran fetch fails, hardcoded constants are used (Rf = 4.3%, ERP = 4.46%); a footnote appears in the KPI strip
 
 **FX**
 - **FRD forward rates**: computed from hardcoded approximate benchmark rates, not live OIS/SOFR swap points — directionally correct but not trading-grade
 - **FXCA cross rates**: routes through USD when a direct yfinance pair is unavailable; minor rounding on exotic crosses
 
----
-
-## Demo
-
-```bash
-bash scripts/demo_cli.sh
-```
-
-Runs 8 scripted demos: all 5 functions on AAPL, 3 non-US DES calls, and 2 AI analyst queries.

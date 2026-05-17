@@ -439,8 +439,14 @@ def _df_to_periods(
     display_list: list[str],
     fy_end_month: int = 12,
     years: int = 4,
+    anchor_field: Optional[str] = None,
 ) -> list[QuarterlyPeriod]:
-    """Convert a yfinance quarterly DataFrame to QuarterlyPeriod list."""
+    """Convert a yfinance quarterly DataFrame to QuarterlyPeriod list.
+
+    anchor_field: if set, periods where this display name resolves to None are
+    dropped.  This filters phantom column dates that yfinance emits for
+    semi-annual reporters (e.g. Lenovo Dec/Jun columns that have almost no data).
+    """
     if df is None or df.empty:
         return []
 
@@ -449,12 +455,6 @@ def _df_to_periods(
     display_to_yf: dict[str, list[str]] = {}
     for yf_key, disp in yf_map.items():
         display_to_yf.setdefault(disp, []).append(yf_key)
-
-    # Collect all display names that appear in this DataFrame
-    available_display = set()
-    for yf_key in df.index:
-        if yf_key in yf_map:
-            available_display.add(yf_map[yf_key])
 
     # Company-specific rows: yf rows not in any map
     all_yf_mapped = set(yf_map.keys())
@@ -483,6 +483,10 @@ def _df_to_periods(
                         val = v
                         break
             fields[disp] = val
+
+        # Skip phantom periods: semi-annual reporters emit column dates with no data
+        if anchor_field is not None and fields.get(anchor_field) is None:
+            continue
 
         # Company-specific rows (prefixed "~")
         for yf_key in extra_yf_rows:
@@ -528,9 +532,9 @@ def _from_yfinance(ticker: Ticker) -> QuarterlyFinancials:
 
     return QuarterlyFinancials(
         symbol=ticker.symbol,
-        income=_df_to_periods(qi, _YF_IS_MAP, _IS_DISPLAY, fy_end_month),
-        balance=_df_to_periods(qb, _YF_BS_MAP, _BS_DISPLAY, fy_end_month),
-        cashflow=_df_to_periods(qc, _YF_CF_MAP, _CF_DISPLAY, fy_end_month),
+        income=_df_to_periods(qi, _YF_IS_MAP, _IS_DISPLAY, fy_end_month, anchor_field="Total Revenue"),
+        balance=_df_to_periods(qb, _YF_BS_MAP, _BS_DISPLAY, fy_end_month, anchor_field="Total Assets"),
+        cashflow=_df_to_periods(qc, _YF_CF_MAP, _CF_DISPLAY, fy_end_month, anchor_field="Cash Flow from Operations"),
     )
 
 

@@ -11,6 +11,8 @@ from typing import Optional
 from mini_bloomberg.core.cache import _cache as _disk_cache
 from mini_bloomberg.core.llm import _get_client
 from mini_bloomberg.core.ticker import Ticker
+from mini_bloomberg.data.equity_classification import classify_financial_rows
+from mini_bloomberg.data.equity_dcf import compute_dcf
 from mini_bloomberg.data.equity_estimates import get_analyst_ratings
 from mini_bloomberg.data.equity_fundamentals import get_financials
 from mini_bloomberg.data.equity_news import fetch_company_news
@@ -80,14 +82,50 @@ def get_equity_report(ticker: Ticker, price_days: int = 90) -> EquityReport:
     if report.financials or report.profile:
         report.valuation = _compute_valuation(report, latest_price, price_date)
 
+    # ── DCF valuation ─────────────────────────────────────────────────────────
+    try:
+        report.dcf = compute_dcf(report, latest_price)
+    except Exception:
+        pass
+
     # ── AI Insights ────────────────────────────────────────────────────────────
     try:
         news = fetch_company_news(ticker)
-        report.insights = _generate_insights(ticker, news, report.financials, report.analyst)
+        company_name = report.profile.name if report.profile else None
+        report.insights = _generate_insights(ticker, news, report.financials, report.analyst, company_name)
+    except Exception:
+        pass
+
+    # ── AI row classification (for XLSX structure) ─────────────────────────────
+    try:
+        extra_is, extra_bs, extra_cf = _extra_quarterly_rows(report.quarterly)
+        report.financial_row_classification = classify_financial_rows(
+            ticker, extra_is, extra_bs, extra_cf
+        )
     except Exception:
         pass
 
     return report
+
+
+def _extra_quarterly_rows(quarterly) -> tuple[list[str], list[str], list[str]]:
+    """Extract company-specific (~-prefixed) row names from quarterly data."""
+    def _extract(periods) -> list[str]:
+        seen: dict[str, None] = {}
+        for p in (periods or []):
+            fields = p.fields if hasattr(p, "fields") else {}
+            for k in fields:
+                if k.startswith("~"):
+                    seen[k[1:]] = None
+        return list(seen)
+
+    if quarterly is None:
+        return [], [], []
+    return (
+        _extract(quarterly.income),
+        _extract(quarterly.balance),
+        _extract(quarterly.cashflow),
+    )
 
 
 # ── Trading metrics ────────────────────────────────────────────────────────────
@@ -119,12 +157,17 @@ def _generate_insights(
     news: list[dict],
     fin: Optional[Financials],
     analyst,
+    company_name: Optional[str] = None,
 ) -> InsightsData:
     """Call Claude (Haiku) to generate What happened? + Our thoughts. Cached 24 h."""
     cache_key = f"insights:{ticker.symbol}:{ticker.exchange_code}:{date.today()}"
     cached = _disk_cache.get(cache_key)
     if isinstance(cached, dict):
         return InsightsData(**cached)
+
+    # Use company name in prompts so the model identifies the right company.
+    # For non-US tickers the symbol alone (e.g. "00700") is ambiguous.
+    label = company_name if company_name else ticker.symbol
 
     headlines = [f"[{n['date']}] {n['title']}" for n in news if n.get("title")]
     news_text = "\n".join(headlines) or "No recent news available."
@@ -139,12 +182,12 @@ def _generate_insights(
             )
 
     prompt = (
-        f"You are a senior equity analyst writing the opening section of an equity research report on {ticker.symbol}.\n\n"
+        f"You are a senior equity analyst writing the opening section of an equity research report on {label}.\n\n"
         f"Recent news headlines:\n{news_text}\n\n"
         f"Recent financial highlights:\n{fin_summary or 'Not available.'}\n\n"
         "Write two sections:\n\n"
         "WHAT_HAPPENED:\n"
-        f"One concise paragraph (3-5 sentences) summarising the most significant recent developments for {ticker.symbol} "
+        f"One concise paragraph (3-5 sentences) summarising the most significant recent developments for {label} "
         "— earnings releases, strategic announcements, guidance updates, or macro events. Cite specific figures where available.\n\n"
         "OUR_THOUGHTS:\n"
         "Two to three short prose paragraphs sharing analytical perspective covering: "

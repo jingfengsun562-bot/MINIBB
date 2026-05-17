@@ -328,6 +328,67 @@ class ValuationMultiples(BaseModel):
     dividend_yield: Optional[float] = None
 
 
+class FCFFYear(BaseModel):
+    """One year row in the DCF schedule (historical or projected)."""
+    year: str
+    revenue: Optional[float] = None
+    ebit: Optional[float] = None
+    tax_rate: Optional[float] = None
+    ebit_after_tax: Optional[float] = None
+    da: Optional[float] = None
+    nwc_change: Optional[float] = None
+    capex: Optional[float] = None
+    fcff: Optional[float] = None
+    pv_factor: Optional[float] = None   # None for historical years
+    pv_fcff: Optional[float] = None     # None for historical years
+
+
+class DCFResult(BaseModel):
+    """Full DCF valuation output — WACC inputs, FCFF schedule, equity bridge, sensitivity."""
+    # External market inputs
+    rf: float                           # 10Y Treasury yield (decimal)
+    erp: float                          # Damodaran implied ERP (decimal)
+    crp: float = 0.0                    # Country risk premium (0 for US)
+    using_fallback_rates: bool = False  # True if Damodaran/Treasury fetch failed
+
+    # Beta & WACC derivation
+    beta_raw: Optional[float] = None    # yfinance beta (levered)
+    beta_levered: float = 1.0           # beta used in CAPM
+    tax_rate: float = 0.21              # average effective tax rate
+    cost_of_equity: float = 0.0
+    cost_of_debt: float = 0.0
+    equity_weight: float = 0.0
+    debt_weight: float = 0.0
+    wacc: float = 0.0
+    terminal_growth: float = 0.025
+
+    # Projection assumptions
+    revenue_cagr: float = 0.0
+    ebit_margin_avg: float = 0.0
+
+    # FCFF schedule
+    fcff_history: list[FCFFYear] = []
+    fcff_projections: list[FCFFYear] = []
+
+    # Valuation bridge
+    pv_discrete: float = 0.0
+    terminal_value: float = 0.0
+    pv_terminal: float = 0.0
+    enterprise_value_dcf: float = 0.0
+    total_debt: float = 0.0
+    cash: float = 0.0
+    equity_value_dcf: float = 0.0
+    shares_outstanding: Optional[int] = None
+    dcf_per_share: Optional[float] = None
+    current_price: Optional[float] = None
+    upside_pct: Optional[float] = None
+
+    # 5×5 sensitivity grid (DCF price per share)
+    sensitivity_wacc: list[float] = []   # 5 WACC variants
+    sensitivity_tg: list[float] = []     # 5 terminal growth variants
+    sensitivity_grid: list[list[float]] = []  # grid[i][j] = price at wacc[i], tg[j]
+
+
 class InsightsData(BaseModel):
     """AI-generated narrative for the Insights section of the HTML report."""
     what_happened: str = ""
@@ -348,6 +409,9 @@ class EquityReport(BaseModel):
     quarterly: Optional["QuarterlyFinancials"] = None
     insights: Optional[InsightsData] = None
     trading_metrics: dict = {}    # 52w high/low, avg_daily_volume, avg_daily_value
+    financial_row_classification: Optional[dict] = None
+    # {"IS": {"Total Revenue": "Revenue", ...}, "BS": {...}, "CF": {...}}
+    dcf: Optional[DCFResult] = None
 
 
 # ─── FX ───────────────────────────────────────────────────────────────────────
