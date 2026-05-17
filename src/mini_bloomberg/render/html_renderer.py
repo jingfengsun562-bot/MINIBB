@@ -553,6 +553,13 @@ def _build_xlsx_payload(d: dict) -> str:
     q_bs  = _qtr_map((quarterly.get("balance")  or []))
     q_cf  = _qtr_map((quarterly.get("cashflow") or []))
 
+    # ── Extend years to include fiscal years only in quarterly data ───────────
+    # e.g. Lenovo FY2026 Q2 exists in quarterly but not yet in annual
+    q_all_years: set[str] = set()
+    for qmap in (q_is, q_bs, q_cf):
+        q_all_years.update(fy for fy in qmap if fy)
+    years = sorted(set(years) | q_all_years)[-4:]
+
     # ── Derive Q4 IS from Annual − Q1 − Q2 − Q3 ──────────────────────────────
     # SEC doesn't file Q4 standalone for income/expense items; derive it here
     # where we have access to both annual and quarterly data.
@@ -646,73 +653,86 @@ def _build_xlsx_payload(d: dict) -> str:
     q_cf_e = _enrich_qtr_cf(q_cf, q_is)
     q_bs_e = _enrich_qtr_bs(q_bs, q_is)
 
-    # ── Universal row lists (§ = section header, Σ = total row) ─────────────
-    _IS_ROWS = [
-        "§ Revenue",
-        "Total Revenue", "Cost of Revenue", "Σ Gross Profit", "Gross Margin %",
-        "§ Operating Expenses",
-        "R&D Expenses", "R&D % of Revenue",
-        "SG&A Expenses", "SG&A % of Revenue",
-        "Total Operating Expenses",
-        "Σ Operating Income", "Operating Margin %",
-        "§ Below Operating",
-        "EBITDA", "EBITDA Margin %",
-        "Pretax Income", "Income Tax Expense",
-        "Σ Net Income", "Net Margin %",
-        "§ Per Share",
-        "EPS (Basic)", "EPS (Diluted)",
-        "Shares Outstanding (Basic)", "Shares Outstanding (Diluted)", "D&A",
-    ]
-    _BS_ROWS = [
-        "§ ASSETS",
-        "§ Current Assets",
-        "Cash & Equivalents", "ST Investments", "Cash & ST Investments",
-        "Accounts Receivable", "A/R % of Revenue",
-        "Inventory", "Inventory % of Revenue",
-        "Σ Total Current Assets",
-        "§ Non-Current Assets",
-        "Net PPE", "Goodwill & Intangibles",
-        "Σ Total Assets",
-        "§ LIABILITIES",
-        "§ Current Liabilities",
-        "Accounts Payable", "A/P % of Revenue", "ST Debt",
-        "Σ Total Current Liabilities",
-        "§ Long-Term Liabilities",
-        "Long-Term Debt",
-        "Σ Total Non-Current Liabilities",
-        "Σ Total Liabilities",
-        "§ EQUITY",
-        "Total Stockholders Equity", "Retained Earnings",
-        "§ Debt Summary",
-        "Total Debt", "Net Debt",
-    ]
-    _CF_ROWS = [
-        "§ Operating Activities",
-        "Net Income", "D&A", "Stock-Based Compensation", "Change in Working Capital",
-        "Σ Cash Flow from Operations", "CFO % of Revenue",
-        "§ Investing Activities",
-        "Capital Expenditures", "CapEx % of Revenue",
-        "Σ Cash Flow from Investing",
-        "§ Free Cash Flow",
-        "Free Cash Flow", "FCF % of Revenue",
-        "§ Financing Activities",
-        "Dividends Paid", "Share Buybacks",
-        "Σ Cash Flow from Financing",
-        "§ Net Change",
-        "Net Change in Cash", "Ending Cash",
+    # ── Section templates: ("kind", label/section_name) ──────────────────────
+    # Kinds:
+    #   "header"     → § section header row (no data)
+    #   "ai_section" → slot filled by AI-classified rows for that section name
+    #   "subtotal"   → Σ row: always included, JS looks up key = label minus "Σ "
+    #   "metric"     → computed row (margins etc.) included if data exists
+
+    _IS_TEMPLATE = [
+        ("header",     "§ Revenue"),
+        ("ai_section", "Revenue"),
+        ("header",     "§ Cost of Revenue"),
+        ("ai_section", "Cost of Revenue"),
+        ("subtotal",   "Σ Gross Profit"),
+        ("metric",     "Gross Margin %"),
+        ("header",     "§ Operating Expenses"),
+        ("ai_section", "Operating Expenses"),
+        ("metric",     "R&D % of Revenue"),
+        ("metric",     "SG&A % of Revenue"),
+        ("subtotal",   "Σ Operating Income"),
+        ("metric",     "EBITDA"),
+        ("metric",     "EBITDA Margin %"),
+        ("metric",     "Operating Margin %"),
+        ("header",     "§ Non-Operating Items"),
+        ("ai_section", "Non-Operating Items"),
+        ("header",     "§ Income Tax"),
+        ("ai_section", "Income Tax"),
+        ("subtotal",   "Σ Net Income"),
+        ("metric",     "Net Margin %"),
+        ("header",     "§ Per Share Data"),
+        ("ai_section", "Per Share Data"),
     ]
 
-    # ── Company-specific rows: collect "~"-prefixed keys from all quarters ─────
-    def _company_rows(qtr_map: dict) -> list[str]:
-        seen: dict[str, None] = {}  # ordered set
-        for fy_data in qtr_map.values():
-            for q_data in fy_data.values():
-                for k in q_data:
-                    if k.startswith("~"):
-                        seen[k[1:]] = None  # strip prefix
-        return list(seen)
+    _BS_TEMPLATE = [
+        ("header",     "§ ASSETS"),
+        ("header",     "§ Current Assets"),
+        ("ai_section", "Current Assets"),
+        ("metric",     "A/R % of Revenue"),
+        ("metric",     "Inventory % of Revenue"),
+        ("subtotal",   "Σ Total Current Assets"),
+        ("header",     "§ Non-Current Assets"),
+        ("ai_section", "Non-Current Assets"),
+        ("subtotal",   "Σ Total Assets"),
+        ("header",     "§ LIABILITIES"),
+        ("header",     "§ Current Liabilities"),
+        ("ai_section", "Current Liabilities"),
+        ("metric",     "A/P % of Revenue"),
+        ("subtotal",   "Σ Total Current Liabilities"),
+        ("header",     "§ Non-Current Liabilities"),
+        ("ai_section", "Non-Current Liabilities"),
+        ("subtotal",   "Σ Total Non-Current Liabilities"),
+        ("subtotal",   "Σ Total Liabilities"),
+        ("header",     "§ SHAREHOLDERS' EQUITY"),
+        ("header",     "§ Contributed Capital"),
+        ("ai_section", "Contributed Capital"),
+        ("header",     "§ Earned Capital"),
+        ("ai_section", "Earned Capital"),
+        ("header",     "§ Other Equity Items"),
+        ("ai_section", "Other Equity Items"),
+        ("subtotal",   "Σ Total Stockholders Equity"),
+    ]
 
-    # Re-key quarterly data stripping "~" prefix for company-specific rows
+    _CF_TEMPLATE = [
+        ("header",     "§ Operating Activities"),
+        ("ai_section", "Operating Activities"),
+        ("subtotal",   "Σ Cash Flow from Operations"),
+        ("metric",     "CFO % of Revenue"),
+        ("header",     "§ Investing Activities"),
+        ("ai_section", "Investing Activities"),
+        ("metric",     "CapEx % of Revenue"),
+        ("subtotal",   "Σ Cash Flow from Investing"),
+        ("header",     "§ Free Cash Flow"),
+        ("ai_section", "Free Cash Flow"),
+        ("metric",     "FCF % of Revenue"),
+        ("header",     "§ Financing Activities"),
+        ("ai_section", "Financing Activities"),
+        ("subtotal",   "Σ Cash Flow from Financing"),
+        ("subtotal",   "Σ Net Change in Cash"),
+    ]
+
+    # ── Re-key quarterly data stripping "~" prefix ────────────────────────────
     def _strip_tilde(qtr_map: dict) -> dict:
         out: dict[str, dict[str, dict]] = {}
         for fy, fy_data in qtr_map.items():
@@ -721,24 +741,106 @@ def _build_xlsx_payload(d: dict) -> str:
                 out[fy][q] = {(k[1:] if k.startswith("~") else k): v for k, v in q_data.items()}
         return out
 
+    # Strip tilde once; reuse for both row building and the payload
+    q_is_s = _strip_tilde(q_is_e)
+    q_bs_s = _strip_tilde(q_bs_e)
+    q_cf_s = _strip_tilde(q_cf_e)
+
+    def _any_data(key: str, annual: dict, quarterly: dict) -> bool:
+        """True if the row has at least one non-None value in annual or quarterly."""
+        if any(v is not None for fy_d in annual.values() for k, v in fy_d.items() if k == key):
+            return True
+        for fy_d in quarterly.values():
+            for q_d in fy_d.values():
+                if q_d.get(key) is not None:
+                    return True
+        return False
+
+    def _build_rows(template: list, classification: dict, annual: dict, quarterly: dict) -> list[str]:
+        """Build ordered rows list from template + AI classification.
+        Data rows with no values in annual or quarterly are silently dropped."""
+        by_section: dict[str, list[str]] = {}
+        for row_name, section in classification.items():
+            by_section.setdefault(section, []).append(row_name)
+
+        rows: list[str] = []
+        for item in template:
+            kind, label = item[0], item[1]
+            if kind == "header":
+                rows.append(label)
+            elif kind == "ai_section":
+                for row in by_section.get(label, []):
+                    if _any_data(row, annual, quarterly):
+                        rows.append(row)
+            elif kind == "subtotal":
+                rows.append(label)
+            elif kind == "metric":
+                if _any_data(label, annual, quarterly):
+                    rows.append(label)
+        return rows
+
+    # ── Build rows using AI classification ────────────────────────────────────
+    classification = d.get("financial_row_classification") or {}
+    is_cls = classification.get("IS") or {}
+    bs_cls = classification.get("BS") or {}
+    cf_cls = classification.get("CF") or {}
+
+    # Default classification used when AI call failed or returned nothing
+    _DEFAULT_IS_CLS: dict[str, str] = {
+        "Total Revenue": "Revenue", "Net Revenue": "Revenue", "Net Sales": "Revenue",
+        "Cost of Revenue": "Cost of Revenue", "Cost of Goods Sold": "Cost of Revenue",
+        "R&D Expenses": "Operating Expenses", "SG&A Expenses": "Operating Expenses",
+        "Total Operating Expenses": "Operating Expenses", "D&A": "Operating Expenses",
+        "EBIT": "Operating Expenses",
+        "Interest Income": "Non-Operating Items", "Interest Expense": "Non-Operating Items",
+        "Income Tax Expense": "Income Tax",
+        "Pretax Income": "Non-Operating Items",
+        "EPS (Basic)": "Per Share Data", "EPS (Diluted)": "Per Share Data",
+        "Shares Outstanding (Basic)": "Per Share Data",
+        "Shares Outstanding (Diluted)": "Per Share Data",
+    }
+    _DEFAULT_BS_CLS: dict[str, str] = {
+        "Cash & Equivalents": "Current Assets", "ST Investments": "Current Assets",
+        "Cash & ST Investments": "Current Assets", "Accounts Receivable": "Current Assets",
+        "Inventory": "Current Assets",
+        "Net PPE": "Non-Current Assets", "Goodwill & Intangibles": "Non-Current Assets",
+        "Long-Term Investments": "Non-Current Assets",
+        "Accounts Payable": "Current Liabilities", "ST Debt": "Current Liabilities",
+        "Long-Term Debt": "Non-Current Liabilities",
+        "Total Debt": "Non-Current Liabilities", "Net Debt": "Non-Current Liabilities",
+        "Retained Earnings": "Earned Capital",
+    }
+    _DEFAULT_CF_CLS: dict[str, str] = {
+        "Net Income": "Operating Activities", "D&A": "Operating Activities",
+        "Stock-Based Compensation": "Operating Activities",
+        "Change in Working Capital": "Operating Activities",
+        "Capital Expenditures": "Investing Activities",
+        "Free Cash Flow": "Free Cash Flow",
+        "Dividends Paid": "Financing Activities", "Share Buybacks": "Financing Activities",
+        "Ending Cash": "Financing Activities",
+    }
+
+    is_cls = is_cls or _DEFAULT_IS_CLS
+    bs_cls = bs_cls or _DEFAULT_BS_CLS
+    cf_cls = cf_cls or _DEFAULT_CF_CLS
+
+    is_rows_built = _build_rows(_IS_TEMPLATE, is_cls, annual_is_m, q_is_s)
+    bs_rows_built = _build_rows(_BS_TEMPLATE, bs_cls, annual_bs_m, q_bs_s)
+    cf_rows_built = _build_rows(_CF_TEMPLATE, cf_cls, annual_cf_m, q_cf_s)
+
     payload = {
-        "symbol":  sym,
-        "years":   years,
-        "annual":  {"IS": annual_is_m, "BS": annual_bs_m, "CF": annual_cf_m},
+        "symbol":    sym,
+        "years":     years,
+        "annual":    {"IS": annual_is_m, "BS": annual_bs_m, "CF": annual_cf_m},
         "quarterly": {
-            "IS": _strip_tilde(q_is_e),
-            "BS": _strip_tilde(q_bs_e),
-            "CF": _strip_tilde(q_cf_e),
+            "IS": q_is_s,
+            "BS": q_bs_s,
+            "CF": q_cf_s,
         },
-        "universal_rows": {
-            "IS": _IS_ROWS,
-            "BS": _BS_ROWS,
-            "CF": _CF_ROWS,
-        },
-        "company_rows": {
-            "IS": _company_rows(q_is),
-            "BS": _company_rows(q_bs),
-            "CF": _company_rows(q_cf),
+        "rows": {
+            "IS": is_rows_built,
+            "BS": bs_rows_built,
+            "CF": cf_rows_built,
         },
     }
     return json.dumps(payload, default=str)
@@ -1158,10 +1260,9 @@ function downloadXLSX() {{
 
 function buildSheet(raw, sheet) {{
   var years  = raw.years || [];
-  var uRows  = (raw.universal_rows || {{}})[sheet] || [];
-  var cRows  = (raw.company_rows  || {{}})[sheet] || [];
-  var annual = ((raw.annual       || {{}})[sheet]) || {{}};
-  var qdata  = ((raw.quarterly    || {{}})[sheet]) || {{}};
+  var allRows = ((raw.rows || {{}})[sheet]) || [];
+  var annual = ((raw.annual    || {{}})[sheet]) || {{}};
+  var qdata  = ((raw.quarterly || {{}})[sheet]) || {{}};
 
   // ── Borders ────────────────────────────────────────────────────────────────
   // White border used as "no-border" on every cell so Excel default gridlines
@@ -1284,9 +1385,9 @@ function buildSheet(raw, sheet) {{
 
     var lStyle, dStyle, aStyle;
     if (isSec) {{
-      lStyle = hBottom(labelRight(secST));
-      dStyle = hBottom(secST);
-      aStyle = hBottom(annRight(secST));
+      lStyle = hTopBottom(labelRight(secST));
+      dStyle = hTopBottom(secST);
+      aStyle = hTopBottom(annRight(secST));
     }} else if (isTotal) {{
       lStyle = labelRight(hTopBottom(ST.total));
       dStyle = hTopBottom(ST.total);
@@ -1338,11 +1439,7 @@ function buildSheet(raw, sheet) {{
     rowNum++;
   }}
 
-  uRows.forEach(function(r) {{ pushRow(r); }});
-  if (cRows.length > 0) {{
-    pushRow('§ Company Specific');
-    cRows.forEach(function(r) {{ pushRow(r); }});
-  }}
+  allRows.forEach(function(r) {{ pushRow(r); }});
 
   ws['!ref'] = 'A1:' + toCol(nCols - 1) + rowNum;
 
@@ -1351,6 +1448,7 @@ function buildSheet(raw, sheet) {{
     for (var i = 0; i < 5; i++) {{ colWidths.push({{wch: 13}}); }}
   }});
   ws['!cols'] = colWidths;
+  ws['!freeze'] = {{xSplit:1, ySplit:4, topLeftCell:'B5'}};
   return ws;
 }}
 </script>

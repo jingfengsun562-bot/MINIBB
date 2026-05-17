@@ -290,7 +290,8 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 | Data | US equities | Non-US equities |
 |---|---|---|
 | Company profile | OpenBB/yfinance | OpenBB/yfinance |
-| Financials | FMP `/stable/income-statement` etc. | OpenBB/yfinance |
+| Annual financials (FA/RPT) | FMP `/stable/income-statement` etc. | OpenBB/yfinance |
+| Quarterly financials (RPT XLSX) | OpenBB → SEC XBRL (`obb.equity.compare.company_facts`, provider `"sec"`) — no API key | yfinance `.quarterly_income_stmt` / `.quarterly_balance_sheet` |
 | Price history | FMP `/stable/historical-price-eod/full` | OpenBB/yfinance |
 | Price targets | FMP `/stable/price-target-consensus` | — |
 | Analyst ratings | OpenBB/yfinance consensus | OpenBB/yfinance |
@@ -304,23 +305,6 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 | Historical OHLCV (FXHV/FRD) | yfinance 1–2y history | 1h |
 | Currency performance (WCR) | yfinance 1y history | 10 min |
 | Forward rates (FRD) | CIP formula + hardcoded approx. rates | 1h |
-
----
-
-## RV — Relative Value
-
-`RV <GO>` prints a side-by-side table of valuation multiples and profitability margins for the loaded ticker versus its auto-detected peer group.
-
-```
-MINI-BB> NVDA US Equity <GO>
-MINI-BB> RV <GO>
-
-  Ticker   P/E     EV/EBITDA   Gross Mgn   Net Mgn   FCF Yield
-  NVDA     54.2×   42.1×       74.6%       55.0%     1.8%
-  AMD      98.4×   52.3×       47.1%       5.9%      0.4%
-  INTC     —       —           33.8%       -17.1%    —
-  ...
-```
 
 ---
 
@@ -342,69 +326,6 @@ MINI-BB> RV <GO>
 The **Insights section** (§2) makes a silent call to `claude-haiku-4-5-20251001` with recent news headlines and financial summary — cached 24h per ticker. Right-hand column shows analyst consensus (rating pill, price target, upside %) and a trading data table derived from 1-year price history.
 
 Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS with Google Fonts loaded via CDN.
-
----
-
-## FX Functions
-
-All FX functions require no API key — data comes from yfinance free tier.
-
-### FXIP — FX Spot Monitor
-
-```
-MINI-BB> FXIP <GO>               ← G10 vs USD
-MINI-BB> FXIP --group em <GO>    ← EM vs USD
-
-  Pair      Spot      Chg %    52W High   52W Low
-  EURUSD    1.0821    ▲ 0.42%  1.1214     1.0178
-  GBPUSD    1.3305    ▲ 0.18%  1.3434     1.2299
-  JPYUSD    0.0069    ▼ 0.31%  0.0072     0.0063
-  ...
-```
-
-### FXCA — FX Calculator
-
-```
-MINI-BB> FXCA --from USD --to JPY --amount 1000 <GO>
-
-  USD → JPY    Rate: 144.820000    1,000 USD = 144,820.0000 JPY
-```
-
-### FXHV — FX Historical Volatility
-
-```
-MINI-BB> FXHV --base EUR --quote USD <GO>
-
-  EURUSD Historical Volatility
-  10d: 7.23%   20d: 6.91%   30d: 7.04%   60d: 7.45%
-  90d: 7.62%  180d: 7.38%    1y: 7.55%
-```
-
-### FRD — FX Forward Rate Curve
-
-Rates computed via Covered Interest Parity. Uses approximate benchmark rates (not live OIS/SOFR).
-
-```
-MINI-BB> FRD --base EUR --quote USD <GO>
-
-  Tenor   Days   Forward     Fwd Points   Impl. Yield Diff
-  O/N        1   1.08200     -0.10 pips   -1.30%
-  1W         7   1.08175     -2.48 pips   -1.30%
-  1M        30   1.07962    -24.80 pips   -1.30%
-  ...
-```
-
-### WCR — World Currency Ranker
-
-```
-MINI-BB> WCR <GO>
-MINI-BB> WCR --group em --sort-by 1m <GO>
-
-  Currency   Spot      1D       1W       1M       3M      YTD
-  EUR        1.0821  ▲0.42%  ▲1.23%  ▲2.11%  ▲3.45%  ▲4.20%
-  GBP        1.3305  ▲0.18%  ▲0.91%  ▲1.55%  ▲2.80%  ▲3.10%
-  ...
-```
 
 ---
 
@@ -449,17 +370,11 @@ Infra       uv, python-dotenv, pytest
 - **COMP for non-US**: FMP peer list is US-centric; non-US peers may be incomplete
 - **ANR for non-US**: price targets only available for US tickers via FMP
 - **Native currency in COMP**: non-US revenue displays in native currency, not USD-converted
+- **Bank / financial sector IS**: banks (e.g. HK-listed Chinese banks) use a different income statement structure — no Cost of Revenue, Gross Profit, Operating Income, or EBITDA. These fields show N/A. Net Interest Income and other bank-specific line items are not currently mapped.
+- **Semi-annual reporters**: companies that publish only H1 and annual results (e.g. Lenovo 00992 HK) will show data only for Q2 and the annual column in the XLSX download. Q1, Q3, Q4 cells are blank — this reflects the company's actual reporting cadence, not a data gap.
+- **Quarterly data availability**: yfinance may not capture the most recent quarterly interim report for some non-US tickers (observed: Q3 2025 missing for China Construction Bank 00939 HK). Data appears once yfinance ingests the filing.
 
 **FX**
 - **FRD forward rates**: computed from hardcoded approximate benchmark rates, not live OIS/SOFR swap points — directionally correct but not trading-grade
 - **FXCA cross rates**: routes through USD when a direct yfinance pair is unavailable; minor rounding on exotic crosses
 
----
-
-## Demo
-
-```bash
-bash scripts/demo_cli.sh
-```
-
-Runs 8 scripted demos: all 5 functions on AAPL, 3 non-US DES calls, and 2 AI analyst queries.

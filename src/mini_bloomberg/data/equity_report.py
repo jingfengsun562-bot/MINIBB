@@ -11,6 +11,7 @@ from typing import Optional
 from mini_bloomberg.core.cache import _cache as _disk_cache
 from mini_bloomberg.core.llm import _get_client
 from mini_bloomberg.core.ticker import Ticker
+from mini_bloomberg.data.equity_classification import classify_financial_rows
 from mini_bloomberg.data.equity_estimates import get_analyst_ratings
 from mini_bloomberg.data.equity_fundamentals import get_financials
 from mini_bloomberg.data.equity_news import fetch_company_news
@@ -87,7 +88,36 @@ def get_equity_report(ticker: Ticker, price_days: int = 90) -> EquityReport:
     except Exception:
         pass
 
+    # ── AI row classification (for XLSX structure) ─────────────────────────────
+    try:
+        extra_is, extra_bs, extra_cf = _extra_quarterly_rows(report.quarterly)
+        report.financial_row_classification = classify_financial_rows(
+            ticker, extra_is, extra_bs, extra_cf
+        )
+    except Exception:
+        pass
+
     return report
+
+
+def _extra_quarterly_rows(quarterly) -> tuple[list[str], list[str], list[str]]:
+    """Extract company-specific (~-prefixed) row names from quarterly data."""
+    def _extract(periods) -> list[str]:
+        seen: dict[str, None] = {}
+        for p in (periods or []):
+            fields = p.fields if hasattr(p, "fields") else {}
+            for k in fields:
+                if k.startswith("~"):
+                    seen[k[1:]] = None
+        return list(seen)
+
+    if quarterly is None:
+        return [], [], []
+    return (
+        _extract(quarterly.income),
+        _extract(quarterly.balance),
+        _extract(quarterly.cashflow),
+    )
 
 
 # ── Trading metrics ────────────────────────────────────────────────────────────

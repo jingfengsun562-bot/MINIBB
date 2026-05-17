@@ -348,6 +348,8 @@ class EquityReport(BaseModel):
     quarterly: Optional["QuarterlyFinancials"] = None
     insights: Optional[InsightsData] = None
     trading_metrics: dict = {}    # 52w high/low, avg_daily_volume, avg_daily_value
+    financial_row_classification: Optional[dict] = None
+    # {"IS": {"Total Revenue": "Revenue", ...}, "BS": {...}, "CF": {...}}
 
 
 # ─── FX ───────────────────────────────────────────────────────────────────────
