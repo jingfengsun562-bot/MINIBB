@@ -74,6 +74,15 @@ def _x(v) -> str:
     return f"{v:.1f}×"
 
 
+def _pe(v) -> str:
+    """P/E formatter: shows N/M when ratio is extreme (|PE| > 999, e.g. near-zero EPS)."""
+    if v is None:
+        return "N/A"
+    if abs(v) > 999:
+        return "N/M"
+    return f"{v:.1f}×"
+
+
 def _p(v, currency: str = "") -> str:
     if v is None:
         return "N/A"
@@ -449,6 +458,29 @@ _CSS = """
     white-space: nowrap;
   }
   .xlsx-callout-btn:hover { background: #c9a227; color: #0a1628; }
+  .dcf-kpi-bar {
+    display: flex; gap: 0; margin-top: 12px; margin-bottom: 16px;
+    border: 1px solid #d0d9f0; border-radius: 6px; overflow: hidden;
+    background: #f5f7fc;
+  }
+  .dcf-kpi {
+    flex: 1; padding: 12px 16px; border-right: 1px solid #d0d9f0;
+    text-align: center;
+  }
+  .dcf-kpi:last-child { border-right: none; }
+  .dcf-kpi .kpi-label {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.9px;
+    text-transform: uppercase; color: #8492a6; margin-bottom: 6px;
+  }
+  .dcf-kpi .kpi-value {
+    font-size: 17px; font-weight: 700; color: #16305a;
+  }
+  .dcf-kpi .kpi-value.pos { color: #176a3e; }
+  .dcf-kpi .kpi-value.neg { color: #b91c1c; }
+  .dcf-footnote {
+    font-size: 10px; color: #8492a6; margin-top: 8px;
+    font-style: italic; letter-spacing: 0.2px;
+  }
 """
 
 
@@ -912,7 +944,7 @@ def render_report_html(result: dict) -> Path:
         )
 
     # ── KPI bar values ─────────────────────────────────────────────────────────
-    kpi_pe       = _x(val.get("pe_ratio"))
+    kpi_pe       = _pe(val.get("pe_ratio"))
     kpi_evebitda = _x(val.get("ev_to_ebitda"))
     kpi_fcfy     = _pct(val.get("fcf_yield"))
     kpi_divy     = _pct_raw(val.get("dividend_yield"))
@@ -961,7 +993,7 @@ def render_report_html(result: dict) -> Path:
         _val_card("Current Price",    _p(val.get("current_price"), currency)) +
         _val_card("Market Cap",       _n(val.get("market_cap"), currency)) +
         _val_card("Enterprise Value", _n(val.get("enterprise_value"), currency)) +
-        _val_card("P / E",            _x(val.get("pe_ratio"))) +
+        _val_card("P / E",            _pe(val.get("pe_ratio"))) +
         _val_card("P / B",            _x(val.get("pb_ratio"))) +
         _val_card("EV / EBITDA",      _x(val.get("ev_to_ebitda"))) +
         _val_card("EV / Sales",       _x(val.get("ev_to_sales"))) +
@@ -984,7 +1016,7 @@ def render_report_html(result: dict) -> Path:
         ev_ebitda_sub = _x(val.get("ev_to_ebitda"))
         rows.append(_td_row(
             [sym, _e(name), _n(val.get("market_cap"), currency),
-             _x(val.get("pe_ratio")), ev_ebitda_sub, sub_gm, sub_nm, sub_fcfy_peer],
+             _pe(val.get("pe_ratio")), ev_ebitda_sub, sub_gm, sub_nm, sub_fcfy_peer],
             "peer-self"
         ))
         for p in peers:
@@ -1004,7 +1036,7 @@ def render_report_html(result: dict) -> Path:
                 _e(p.get("symbol", "")),
                 _e((p.get("name") or "")[:24]),
                 _n(mktcap, pc),
-                _x(p.get("pe_ratio")),
+                _pe(p.get("pe_ratio")),
                 ev_ebitda_p,
                 gm_p, nm_p, fcfy_p,
             ]))
@@ -1024,6 +1056,69 @@ def render_report_html(result: dict) -> Path:
                     if float_shares and prof.get("shares_outstanding") else None)
     float_pct_str = f"{float_pct:.0f}%" if float_pct else "N/A"
     latest_ratio = rlist[0] if rlist else {}
+
+    # ── DCF data ───────────────────────────────────────────────────────────────
+    dcf = d.get("dcf") or {}
+    dcf_available = bool(dcf and dcf.get("dcf_per_share") is not None)
+
+    def _dcf_kpi_bar() -> str:
+        if not dcf_available:
+            return ""
+        dcf_price  = dcf.get("dcf_per_share")
+        upside_v   = dcf.get("upside_pct")
+        wacc_v     = dcf.get("wacc")
+        tg_v       = dcf.get("terminal_growth")
+        rf_v       = dcf.get("rf")
+        upside_cls = "pos" if (upside_v or 0) >= 0 else "neg"
+        upside_str = (
+            f'+{upside_v*100:.1f}%' if upside_v and upside_v >= 0
+            else f'{upside_v*100:.1f}%' if upside_v is not None
+            else "N/A"
+        )
+        fallback_note = (
+            '<div class="dcf-footnote">* WACC uses default market assumptions '
+            '(Damodaran/Treasury data unavailable)</div>'
+            if dcf.get("using_fallback_rates") else ""
+        )
+        return (
+            f'<div class="dcf-kpi-bar">'
+            f'<div class="dcf-kpi"><div class="kpi-label">DCF Fair Value</div>'
+            f'<div class="kpi-value">{_p(dcf_price, currency)}</div></div>'
+            f'<div class="dcf-kpi"><div class="kpi-label">Upside / Downside</div>'
+            f'<div class="kpi-value {upside_cls}">{upside_str}</div></div>'
+            f'<div class="dcf-kpi"><div class="kpi-label">WACC</div>'
+            f'<div class="kpi-value">{f"{wacc_v*100:.1f}%" if wacc_v else "N/A"}</div></div>'
+            f'<div class="dcf-kpi"><div class="kpi-label">Terminal Growth</div>'
+            f'<div class="kpi-value">{f"{tg_v*100:.1f}%" if tg_v else "N/A"}</div></div>'
+            f'<div class="dcf-kpi"><div class="kpi-label">Risk-Free Rate</div>'
+            f'<div class="kpi-value">{f"{rf_v*100:.2f}%" if rf_v else "N/A"}</div></div>'
+            f'</div>'
+            f'{fallback_note}'
+        )
+
+    def _valuation_section() -> str:
+        btn_disabled = "" if dcf_available else " disabled style='opacity:0.4;cursor:not-allowed'"
+        unavail_msg = (
+            '<p style="color:#8492a6;font-size:12px;margin-bottom:12px">'
+            'DCF data unavailable — check data source connectivity.</p>'
+            if not dcf_available else ""
+        )
+        return (
+            f'{_dcf_kpi_bar()}'
+            f'{unavail_msg}'
+            f'<div class="xlsx-callout">'
+            f'<div class="xlsx-callout-body">'
+            f'<div class="xlsx-callout-title">Full DCF Valuation Model</div>'
+            f'<div class="xlsx-callout-sub">'
+            f'5-year FCFF projections &nbsp;·&nbsp; WACC derivation via CAPM &nbsp;·&nbsp; '
+            f'Gordon Growth terminal value &nbsp;·&nbsp; Enterprise value bridge &nbsp;·&nbsp; '
+            f'Sensitivity analysis (WACC &times; terminal growth)'
+            f'</div>'
+            f'<button class="xlsx-callout-btn"{btn_disabled} onclick="downloadValuationXLSX()">'
+            f'&#8675;&nbsp; Download Valuation Model in XLSX</button>'
+            f'</div>'
+            f'</div>'
+        )
 
     # ── Insights text ──────────────────────────────────────────────────────────
     ins = d.get("insights") or {}
@@ -1060,6 +1155,7 @@ def render_report_html(result: dict) -> Path:
 
     date_display = gendt[:10] if gendt else ""
     xlsx_payload = _build_xlsx_payload(d)
+    dcf_json = json.dumps(dcf, default=str) if dcf else "null"
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1204,15 +1300,21 @@ def render_report_html(result: dict) -> Path:
     {_ratio_table()}
   </div>
 
-  <!-- §5 Valuation Multiples -->
+  <!-- §5 Valuation (DCF) -->
   <div class="section">
-    {_section(5, "Valuation Multiples", f"As of {date_display}")}
+    {_section(5, "Valuation", "DCF · WACC · Fair Value Estimate")}
+    {_valuation_section()}
+  </div>
+
+  <!-- §6 Valuation Multiples -->
+  <div class="section">
+    {_section(6, "Valuation Multiples", f"As of {date_display}")}
     <div class="val-grid">{val_cards_html}</div>
   </div>
 
-  <!-- §6 Peer Comparison -->
+  <!-- §7 Peer Comparison -->
   <div class="section">
-    {_section(6, "Peer Comparison")}
+    {_section(7, "Peer Comparison")}
     {_peer_table()}
   </div>
 
@@ -1235,6 +1337,7 @@ def render_report_html(result: dict) -> Path:
 </div><!-- /page -->
 
 <script type="application/json" id="xlsx-data">{xlsx_payload}</script>
+<script type="application/json" id="dcf-data">{dcf_json}</script>
 <script>
 function downloadXLSX() {{
   if (typeof XLSX === 'undefined') {{
@@ -1256,6 +1359,346 @@ function downloadXLSX() {{
   }} catch(e) {{
     alert('Build error: ' + e.message + ' | ' + (e.stack || ''));
   }}
+}}
+
+function downloadValuationXLSX() {{
+  if (typeof XLSX === 'undefined') {{
+    alert('Excel library failed to load.');
+    return;
+  }}
+  var dcf;
+  try {{
+    dcf = JSON.parse(document.getElementById('dcf-data').textContent);
+  }} catch(e) {{
+    alert('DCF data error: ' + e.message); return;
+  }}
+  if (!dcf || !dcf.dcf_per_share) {{
+    alert('DCF data not available for this ticker.'); return;
+  }}
+  try {{
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, _buildDCFProjectionsSheet(dcf), 'DCF Projections');
+    XLSX.utils.book_append_sheet(wb, _buildWACCSheet(dcf), 'WACC Derivation');
+    XLSX.utils.book_append_sheet(wb, _buildValSummarySheet(dcf), 'Valuation Summary');
+    XLSX.utils.book_append_sheet(wb, _buildLimitationsSheet(dcf), 'Limitations & Assumptions');
+    XLSX.writeFile(wb, 'DCF_Valuation.xlsx');
+  }} catch(e) {{
+    alert('Build error: ' + e.message);
+  }}
+}}
+
+// ── Shared XLSX style helpers ─────────────────────────────────────────────────
+var _NAV  = {{top:{{style:'thin',color:{{rgb:'0a1628'}}}},bottom:{{style:'thin',color:{{rgb:'0a1628'}}}},left:{{style:'thin',color:{{rgb:'0a1628'}}}},right:{{style:'thin',color:{{rgb:'0a1628'}}}}}};
+var _WBDR = {{top:{{style:'thin',color:{{rgb:'FFFFFF'}}}},bottom:{{style:'thin',color:{{rgb:'FFFFFF'}}}},left:{{style:'thin',color:{{rgb:'FFFFFF'}}}},right:{{style:'thin',color:{{rgb:'FFFFFF'}}}}}};
+function _hdr(v) {{ return {{v:v,t:'s',s:{{font:{{bold:true,color:{{rgb:'FFFFFF'}},sz:10}},fill:{{fgColor:{{rgb:'16305a'}}}},alignment:{{horizontal:'center'}},border:_WBDR}}}}; }}
+function _lbl(v) {{ return {{v:v,t:'s',s:{{font:{{bold:true,sz:10}},border:_WBDR}}}}; }}
+function _num(v, pct) {{
+  if (v === null || v === undefined) return {{v:'N/A',t:'s',s:{{border:_WBDR}}}};
+  var fmt = pct ? '0.00%' : (Math.abs(v) > 1e6 ? '#,##0' : '0.00');
+  return {{v:pct ? v : v, t:'n', z:fmt, s:{{alignment:{{horizontal:'right'}},border:_WBDR}}}};
+}}
+function _gold(v) {{ return {{v:v,t:'s',s:{{font:{{bold:true,sz:11}},fill:{{fgColor:{{rgb:'c9a227'}}}},alignment:{{horizontal:'right'}},border:_WBDR}}}}; }}
+function _goldN(v, pct) {{
+  var fmt = pct ? '0.00%' : '0.00';
+  return {{v:v,t:'n',z:fmt,s:{{font:{{bold:true}},fill:{{fgColor:{{rgb:'c9a227'}}}},alignment:{{horizontal:'right'}},border:_WBDR}}}};
+}}
+function _ws(data, cols) {{
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = cols;
+  return ws;
+}}
+
+// ── Sheet 1: DCF Projections ──────────────────────────────────────────────────
+function _buildDCFProjectionsSheet(dcf) {{
+  var hist = dcf.fcff_history || [];
+  var proj = dcf.fcff_projections || [];
+  var allYears = hist.map(function(r){{return r.year;}}).concat(proj.map(function(r){{return r.year;}}));
+
+  var hdrRow = [_lbl('($ millions)')].concat(allYears.map(function(y, i) {{
+    return _hdr(i < hist.length ? y + ' A' : y + ' E');
+  }}));
+
+  function row(label, field, pct) {{
+    var cells = [_lbl(label)];
+    hist.forEach(function(r) {{ cells.push(_num(r[field] ? r[field]/1e6 : r[field], pct)); }});
+    proj.forEach(function(r) {{ cells.push(_num(r[field] ? r[field]/1e6 : r[field], pct)); }});
+    return cells;
+  }}
+
+  var data = [
+    hdrRow,
+    row('Revenue', 'revenue', false),
+    row('EBIT', 'ebit', false),
+    row('Tax Rate', 'tax_rate', true),
+    row('EBIT × (1−T)', 'ebit_after_tax', false),
+    row('D&A', 'da', false),
+    row('Δ NWC (outflow)', 'nwc_change', false),
+    row('CapEx', 'capex', false),
+    [_lbl('')].concat(allYears.map(function(){{ return {{v:'',t:'s'}}; }})),
+    [_lbl('FCFF')].concat(
+      hist.map(function(r){{ return _num(r.fcff ? r.fcff/1e6 : r.fcff, false); }}).concat(
+      proj.map(function(r){{ return _num(r.fcff ? r.fcff/1e6 : r.fcff, false); }})
+    )),
+    [_lbl('')].concat(allYears.map(function(){{ return {{v:'',t:'s'}}; }})),
+    [_lbl('Discount Factor')].concat(
+      hist.map(function(){{ return {{v:'—',t:'s'}}; }}).concat(
+      proj.map(function(r){{ return _num(r.pv_factor, false); }})
+    )),
+    [_lbl('PV of FCFF')].concat(
+      hist.map(function(){{ return {{v:'—',t:'s'}}; }}).concat(
+      proj.map(function(r){{ return _num(r.pv_fcff ? r.pv_fcff/1e6 : r.pv_fcff, false); }})
+    )),
+  ];
+
+  var cols = [{{wch:22}}].concat(allYears.map(function(){{ return {{wch:13}}; }}));
+  return _ws(data, cols);
+}}
+
+// ── Sheet 2: WACC Derivation ──────────────────────────────────────────────────
+function _buildWACCSheet(dcf) {{
+  var data = [
+    [_hdr('Parameter'), _hdr('Value')],
+    [_lbl('Market Cap (E)'), _num(dcf.equity_weight * (dcf.total_debt / (dcf.debt_weight || 1e-9)) / 1e6, false)],
+    [_lbl('Total Debt (D)'), _num(dcf.total_debt / 1e6, false)],
+    [_lbl('Equity Weight'), _num(dcf.equity_weight, true)],
+    [_lbl('Debt Weight'), _num(dcf.debt_weight, true)],
+    [{{v:'',t:'s'}}, {{v:'',t:'s'}}],
+    [_lbl('Risk-Free Rate (Rf)'), _num(dcf.rf, true)],
+    [_lbl('Levered Beta (β)'), _num(dcf.beta_levered, false)],
+    [_lbl('Equity Risk Premium (ERP)'), _num(dcf.erp, true)],
+    [_lbl('Country Risk Premium (CRP)'), _num(dcf.crp, true)],
+    [_lbl('Cost of Equity (Ke)'), _num(dcf.cost_of_equity, true)],
+    [{{v:'',t:'s'}}, {{v:'',t:'s'}}],
+    [_lbl('Cost of Debt (Kd)'), _num(dcf.cost_of_debt, true)],
+    [_lbl('Effective Tax Rate'), _num(dcf.tax_rate, true)],
+    [_lbl('After-tax Cost of Debt'), _num(dcf.cost_of_debt * (1 - dcf.tax_rate), true)],
+    [{{v:'',t:'s'}}, {{v:'',t:'s'}}],
+    [_gold('WACC'), _goldN(dcf.wacc, true)],
+    [_lbl('Terminal Growth Rate'), _num(dcf.terminal_growth, true)],
+  ];
+  return _ws(data, [{{wch:30}}, {{wch:16}}]);
+}}
+
+// ── Sheet 3: Valuation Summary + Sensitivity ──────────────────────────────────
+function _buildValSummarySheet(dcf) {{
+  var data = [
+    [_hdr('Valuation Bridge'), _hdr('$ millions')],
+    [_lbl('PV of Explicit FCFFs (Yrs 1–5)'), _num(dcf.pv_discrete / 1e6, false)],
+    [_lbl('Terminal Value (Gordon Growth)'), _num(dcf.terminal_value / 1e6, false)],
+    [_lbl('PV of Terminal Value'), _num(dcf.pv_terminal / 1e6, false)],
+    [_lbl('Enterprise Value (DCF)'), _num(dcf.enterprise_value_dcf / 1e6, false)],
+    [_lbl('Less: Total Debt'), _num(-dcf.total_debt / 1e6, false)],
+    [_lbl('Plus: Cash & Equivalents'), _num(dcf.cash / 1e6, false)],
+    [_lbl('Equity Value'), _num(dcf.equity_value_dcf / 1e6, false)],
+    [_lbl('Shares Outstanding (millions)'), _num(dcf.shares_outstanding / 1e6, false)],
+    [{{v:'',t:'s'}}, {{v:'',t:'s'}}],
+    [_gold('DCF Price Per Share'), _goldN(dcf.dcf_per_share, false)],
+    [_lbl('Current Price'), _num(dcf.current_price, false)],
+    [_lbl('Implied Upside / (Downside)'), _num(dcf.upside_pct, true)],
+  ];
+
+  // Sensitivity table
+  var swaccs = dcf.sensitivity_wacc || [];
+  var stgs   = dcf.sensitivity_tg   || [];
+  var sgrid  = dcf.sensitivity_grid || [];
+  if (swaccs.length && stgs.length && sgrid.length) {{
+    data.push([{{v:'',t:'s'}},{{v:'',t:'s'}}]);
+    data.push([{{v:'',t:'s'}},{{v:'',t:'s'}}]);
+    // Header: WACC vs Term. Growth sensitivity
+    var sensHdr = [_hdr('WACC \\ Term. Growth')].concat(stgs.map(function(g) {{
+      return _hdr((g*100).toFixed(1) + '%');
+    }}));
+    data.push(sensHdr);
+    sgrid.forEach(function(row, i) {{
+      var w = swaccs[i];
+      var isBase = (i === Math.floor(swaccs.length / 2));
+      var wCell = isBase ? _gold((w*100).toFixed(1)+'%') : _lbl((w*100).toFixed(1)+'%');
+      var cells = [wCell].concat(row.map(function(price, j) {{
+        var isBaseCell = isBase && j === Math.floor(stgs.length / 2);
+        return isBaseCell ? _goldN(price, false) : _num(price, false);
+      }}));
+      data.push(cells);
+    }});
+  }}
+
+  var cols = [{{wch:32}}, {{wch:16}}].concat(stgs.map(function(){{ return {{wch:12}}; }}));
+  return _ws(data, cols);
+}}
+
+// ── Sheet 4: Limitations & Assumptions ───────────────────────────────────────
+function _buildLimitationsSheet(dcf) {{
+  // Style helpers specific to this sheet
+  function _title(v) {{
+    return {{v:v, t:'s', s:{{
+      font:{{bold:true, sz:16, color:{{rgb:'FFFFFF'}}}},
+      fill:{{fgColor:{{rgb:'0a1628'}}}},
+      alignment:{{horizontal:'left', vertical:'center', wrapText:true}},
+      border:_WBDR
+    }}}};
+  }}
+  function _sectionHdr(v) {{
+    return {{v:v, t:'s', s:{{
+      font:{{bold:true, sz:11, color:{{rgb:'FFFFFF'}}}},
+      fill:{{fgColor:{{rgb:'16305a'}}}},
+      alignment:{{horizontal:'left', vertical:'center'}},
+      border:_WBDR
+    }}}};
+  }}
+  function _paramCell(v) {{
+    return {{v:v, t:'s', s:{{
+      font:{{bold:true, sz:10}},
+      fill:{{fgColor:{{rgb:'E8ECF2'}}}},
+      alignment:{{horizontal:'left', vertical:'top', wrapText:true}},
+      border:_WBDR
+    }}}};
+  }}
+  function _valueCell(v) {{
+    return {{v:v, t:'s', s:{{
+      font:{{sz:10}},
+      fill:{{fgColor:{{rgb:'FFFFFF'}}}},
+      alignment:{{horizontal:'left', vertical:'top', wrapText:true}},
+      border:_WBDR
+    }}}};
+  }}
+  function _blank() {{ return {{v:'', t:'s', s:{{border:_WBDR}}}}; }}
+
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US', {{year:'numeric', month:'long', day:'numeric'}});
+  var wacc = dcf.wacc ? (dcf.wacc * 100).toFixed(2) + '%' : 'N/A';
+  var tg   = dcf.terminal_growth ? (dcf.terminal_growth * 100).toFixed(1) + '%' : 'N/A';
+  var rf   = dcf.rf   ? (dcf.rf   * 100).toFixed(2) + '%' : 'N/A';
+  var erp  = dcf.erp  ? (dcf.erp  * 100).toFixed(2) + '%' : 'N/A';
+  var crp  = dcf.crp  ? (dcf.crp  * 100).toFixed(2) + '%' : '0.00% (US / not applicable)';
+  var beta = dcf.beta_levered ? dcf.beta_levered.toFixed(2) : 'N/A';
+  var kd   = dcf.cost_of_debt ? (dcf.cost_of_debt * 100).toFixed(2) + '%' : 'N/A';
+  var fallback = dcf.using_fallback_rates
+    ? 'WARNING: Damodaran / Treasury live fetch failed. Rf and ERP are fallback constants, not live values.'
+    : 'Rf and ERP sourced live from US Treasury and Damodaran ctryprem page at report generation time.';
+
+  var data = [
+    // Row 0 — big title cell (merged visually via wide column)
+    [_title('DCF Valuation — Limitations & Assumptions'), _blank(), _blank()],
+    [_valueCell('Generated: ' + dateStr), _blank(), _blank()],
+    [_blank(), _blank(), _blank()],
+
+    // ── KEY ASSUMPTIONS ──────────────────────────────────────────────────────
+    [_sectionHdr('KEY ASSUMPTIONS'), _sectionHdr('Value Used'), _sectionHdr('Rationale / Source')],
+    [_paramCell('Risk-Free Rate (Rf)'),
+     _valueCell(rf),
+     _valueCell('10-year US Treasury constant-maturity yield on report date, sourced from US Treasury website.')],
+    [_paramCell('Equity Risk Premium (ERP)'),
+     _valueCell(erp),
+     _valueCell('Damodaran implied ERP for the US mature market, read from ctryprem.html on report date.')],
+    [_paramCell('Country Risk Premium (CRP)'),
+     _valueCell(crp),
+     _valueCell('Damodaran country-specific CRP from ctryprem.html, matched to the company domicile country (from yfinance profile.country). 0% for US-domiciled companies.')],
+    [_paramCell('Beta (Levered, β)'),
+     _valueCell(beta),
+     _valueCell('Historical market beta from yfinance (ticker.info["beta"]). Reflects actual leverage of the company at the time of data fetch. A Damodaran sector-unlevered / relevered beta would be more precise but requires an additional dependency.')],
+    [_paramCell('Cost of Debt (Kd)'),
+     _valueCell(kd),
+     _valueCell('Computed as Interest Expense / Total Debt from latest annual income statement and balance sheet (FMP). Clamped to [Rf, Rf + 10%] to exclude outliers.')],
+    [_paramCell('WACC'),
+     _valueCell(wacc),
+     _valueCell('WACC = (E/V) × Ke + (D/V) × Kd × (1 − T). Clamped to [4%, 20%] to prevent extreme values from distorting projections.')],
+    [_paramCell('Terminal Growth Rate (g)'),
+     _valueCell(tg),
+     _valueCell('Fixed at 2.5% — consistent with long-run nominal GDP growth for developed markets. Per Damodaran guidance, g must not exceed the risk-free rate (currently ' + rf + ').')],
+    [_paramCell('Projection Horizon'),
+     _valueCell('5 years explicit'),
+     _valueCell('Standard DCF horizon for equity valuation. Beyond 5 years, returns are captured in the terminal value via the Gordon Growth Model.')],
+    [_blank(), _blank(), _blank()],
+
+    // ── FCFF PROJECTION METHODOLOGY ──────────────────────────────────────────
+    [_sectionHdr('FCFF PROJECTION METHODOLOGY'), _sectionHdr(''), _sectionHdr('')],
+    [_paramCell('Revenue Growth'),
+     _valueCell('Historical 3–4 year CAGR, decayed 10% per year'),
+     _valueCell('Base growth = compound annual growth rate of revenue from FMP annual income statements. Applied growth decays by 10% each successive year (e.g. if CAGR = 8%: Year 1 = 8.0%, Year 2 = 7.2%, Year 3 = 6.5%, …) to reflect mean-reversion toward the long-run growth rate of the economy.')],
+    [_paramCell('EBIT Margin'),
+     _valueCell('Average of historical EBIT/Revenue'),
+     _valueCell('Held constant at the historical average across available fiscal years. Does not reflect margin expansion/compression expectations. Analyst forward estimates would improve accuracy but are not available on the free FMP tier.')],
+    [_paramCell('D&A'),
+     _valueCell('Last historical year held constant'),
+     _valueCell('Depreciation & Amortization from FMP cash flow statement. Held flat across the projection period — a conservative assumption that understates D&A growth in CapEx-heavy businesses.')],
+    [_paramCell('Change in NWC'),
+     _valueCell('NWC change / Revenue ratio, applied to projected revenue'),
+     _valueCell('Net Working Capital change sourced from FMP cash flow statement (changeInWorkingCapital). Normalised as a % of revenue and applied proportionally. FMP sign convention: positive = cash inflow (NWC decreased); we negate to conform to FCFF formula.')],
+    [_paramCell('CapEx'),
+     _valueCell('CapEx / Revenue ratio, applied to projected revenue'),
+     _valueCell('Capital Expenditure from FMP cash flow statement. Normalised as % of revenue. FMP reports CapEx as negative; we take absolute value. Industry-normalised CapEx/Sales from Damodaran would be more rigorous but requires scraping an additional page.')],
+    [_blank(), _blank(), _blank()],
+
+    // ── DATA SOURCES ─────────────────────────────────────────────────────────
+    [_sectionHdr('DATA SOURCES'), _sectionHdr('URL / Reference'), _sectionHdr('Cache TTL')],
+    [_paramCell('Financial Statements (IS / BS / CF)'),
+     _valueCell('Financial Modeling Prep (FMP) — /stable/income-statement, /stable/balance-sheet-statement, /stable/cash-flow-statement'),
+     _valueCell('24 hours')],
+    [_paramCell('Market Data (Beta, Market Cap, Shares)'),
+     _valueCell('yfinance — ticker.info'),
+     _valueCell('24 hours (via OpenBB equity profile)')],
+    [_paramCell('Risk-Free Rate'),
+     _valueCell('US Treasury — home.treasury.gov (current year daily yield curve)'),
+     _valueCell('4 hours')],
+    [_paramCell('ERP & CRP'),
+     _valueCell('Damodaran Online — pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/ctryprem.html'),
+     _valueCell('24 hours')],
+    [_blank(), _blank(), _blank()],
+
+    // ── KNOWN LIMITATIONS ────────────────────────────────────────────────────
+    [_sectionHdr('KNOWN LIMITATIONS'), _sectionHdr(''), _sectionHdr('')],
+    [_paramCell('Beta relevering'),
+     _valueCell('Not performed'),
+     _valueCell('Damodaran methodology calls for unlevering the sector beta and relevering at the company D/E ratio. We use yfinance raw beta directly. This may over- or under-state Ke for companies with unusual capital structures.')],
+    [_paramCell('Non-US tickers'),
+     _valueCell('CRP applied; Rf stays US Treasury'),
+     _valueCell('For non-US companies we add the Damodaran CRP to ERP, but the risk-free rate remains the US 10Y Treasury. A local sovereign yield would be more appropriate for companies with predominantly local cash flows.')],
+    [_paramCell('Cyclical / negative FCFF'),
+     _valueCell('Model may produce unreliable output'),
+     _valueCell('If historical FCFF is negative or highly volatile (e.g. airlines, mining, early-stage companies), the CAGR-based projection will produce distorted results. The DCF fair value should be treated with caution for such companies.')],
+    [_paramCell('Accounting differences'),
+     _valueCell('GAAP only'),
+     _valueCell('FMP reports GAAP financials. Non-GAAP adjustments (stock-based compensation, restructuring, amortisation of acquired intangibles) are not made. For technology companies in particular, GAAP FCFF may differ significantly from cash FCFF.')],
+    [_paramCell('Single-scenario model'),
+     _valueCell('Base case only'),
+     _valueCell('This model presents one scenario (base CAGR, average margin). No bull/bear scenarios are modelled. The sensitivity table on the Valuation Summary sheet provides a partial view of uncertainty across WACC and terminal growth.')],
+    [_paramCell('Data source availability'),
+     _valueCell(fallback),
+     _valueCell('If live fetches fail, fallback constants are used: Rf = 4.3%, ERP = 4.46%. These were accurate as of the last code update but may diverge from current market conditions.')],
+    [_blank(), _blank(), _blank()],
+
+    // ── DISCLAIMER ───────────────────────────────────────────────────────────
+    [_sectionHdr('DISCLAIMER'), _sectionHdr(''), _sectionHdr('')],
+    [_valueCell(
+      'This valuation is generated by Mini-Bloomberg for informational and educational purposes only. ' +
+      'It does not constitute investment advice, a recommendation to buy or sell any security, or a solicitation of any offer. ' +
+      'The DCF model applies standard academic methodology with simplifying assumptions; actual intrinsic value will differ. ' +
+      'Past financial performance is not indicative of future results. ' +
+      'All figures are in the reporting currency of the company unless otherwise stated.'
+    ), _blank(), _blank()],
+  ];
+
+  var ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Column widths: Parameter (col A) | Value (col B) | Rationale (col C)
+  ws['!cols'] = [{{wch:32}}, {{wch:28}}, {{wch:80}}];
+
+  // Merge the title row and disclaimer row across all 3 columns
+  if (!ws['!merges']) ws['!merges'] = [];
+  ws['!merges'].push(
+    {{s:{{r:0,c:0}}, e:{{r:0,c:2}}}},   // title
+    {{s:{{r:1,c:0}}, e:{{r:1,c:2}}}},   // date line
+    {{s:{{r:2,c:0}}, e:{{r:2,c:2}}}},   // blank
+    // section headers that span cols B+C
+    {{s:{{r:3,c:1}},  e:{{r:3,c:2}}}},
+    {{s:{{r:14,c:0}}, e:{{r:14,c:2}}}},
+    {{s:{{r:21,c:0}}, e:{{r:21,c:2}}}},
+    {{s:{{r:27,c:0}}, e:{{r:27,c:2}}}},
+    {{s:{{r:33,c:0}}, e:{{r:33,c:2}}}},
+    {{s:{{r:data.length-2,c:0}}, e:{{r:data.length-2,c:2}}}},  // disclaimer text
+    {{s:{{r:data.length-1,c:0}}, e:{{r:data.length-1,c:2}}}}   // trailing blank
+  );
+
+  return ws;
 }}
 
 function buildSheet(raw, sheet) {{

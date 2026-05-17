@@ -44,7 +44,7 @@ MINI-BB> ? compare NVDA and AMD profitability <GO>
 | `ANR` | Analyst Recommendations | Consensus target price + buy/hold/sell breakdown |
 | `COMP` | Comparables | Peer table: margins, EBITDA, debt, beta |
 | `RV` | Relative Value | Valuation multiples + margin comparison vs. peer group |
-| `RPT` | (custom) | Full investment-bank-style HTML equity report (opens in browser) |
+| `RPT` | (custom) | Full investment-bank-style HTML equity report with DCF valuation model (opens in browser) |
 
 **FX**
 
@@ -297,6 +297,16 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 | Analyst ratings | OpenBB/yfinance consensus | OpenBB/yfinance |
 | Peers | FMP `/stable/stock-peers` | — |
 
+**DCF Valuation (RPT §5)**
+
+| Data | Source | Cache TTL |
+|---|---|---|
+| Risk-free rate (Rf) | US Treasury — 10-year constant-maturity yield | 4h |
+| Equity Risk Premium (ERP) | Damodaran `ctryprem.html` — US implied ERP | 24h |
+| Country Risk Premium (CRP) | Damodaran `ctryprem.html` — matched to company domicile | 24h |
+| Beta, market cap, shares | yfinance `ticker.info` (via OpenBB equity profile) | 24h |
+| FCFF inputs (EBIT, D&A, CapEx, NWC, interest) | FMP annual income statement + cash flow + balance sheet | 24h |
+
 **FX** — all functions use **yfinance only** (ticker format: `EURUSD=X`)
 
 | Data | Source | Cache TTL |
@@ -318,14 +328,35 @@ Start the FastAPI server (`uvicorn mini_bloomberg.web.server:app --reload --port
 |---|---|---|
 | 1 | Company Profile | Key identifiers, description, exchange info |
 | 2 | Insights | AI-generated "What happened?" + "Our thoughts"; compact analyst consensus + trading data (52w range, avg vol, beta, P/BV …) |
-| 3 | Financial Statements | 4-year income statement, balance sheet, cash flow — side-by-side annual columns |
+| 3 | Financial Statements | 4-year income statement, balance sheet, cash flow — side-by-side annual columns; XLSX download |
 | 4 | Financial Ratios | Profitability, leverage, efficiency — 4 years |
-| 5 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
-| 6 | Peer Comparison | Subject ticker highlighted in peer table |
+| 5 | Valuation | DCF fair value, WACC, upside %, terminal growth, risk-free rate — KPI strip + XLSX valuation model download |
+| 6 | Valuation Multiples | 8 metric cards (P/E, EV/EBITDA, FCF Yield, …) |
+| 7 | Peer Comparison | Subject ticker highlighted in peer table |
 
 The **Insights section** (§2) makes a silent call to `claude-haiku-4-5-20251001` with recent news headlines and financial summary — cached 24h per ticker. Right-hand column shows analyst consensus (rating pill, price target, upside %) and a trading data table derived from 1-year price history.
 
-Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS with Google Fonts loaded via CDN.
+The **Valuation section** (§5) runs a full DCF model on every `RPT` call and exposes a one-click **XLSX download** with four sheets:
+
+| Sheet | Content |
+|---|---|
+| DCF Projections | Historical FCFF (3–4 years) + 5-year projection; discount factors and PV of each FCFF |
+| WACC Derivation | Full CAPM build — Rf, β, ERP, CRP, Ke, Kd, capital structure weights, WACC |
+| Valuation Summary | Enterprise value bridge (PV FCFFs + terminal value → equity value → price per share); 5×5 sensitivity table (WACC × terminal growth) |
+| Limitations & Assumptions | All model assumptions, data sources, known limitations, and disclaimer |
+
+**DCF methodology** (follows [Damodaran](https://pages.stern.nyu.edu/~adamodar/) framework):
+- **FCFF** = EBIT × (1 − T) + D&A − ΔNWC − CapEx, from FMP annual statements
+- **Revenue projection**: 3–4 year historical CAGR, decayed 10% per year toward long-run growth
+- **WACC** via CAPM: Ke = Rf + β × (ERP + CRP); Kd = interest expense / total debt
+- **Risk-free rate**: live 10-year US Treasury yield (cached 4h)
+- **ERP & CRP**: live from Damodaran `ctryprem.html` (cached 24h); CRP is non-zero for non-US companies
+- **Terminal value**: Gordon Growth Model with 2.5% perpetuity growth rate
+- Sensitivity grid spans WACC ± 2% and terminal growth 1.5%–3.5%
+
+P/E ratios show **N/M** (not meaningful) when the absolute value exceeds 999× — e.g. near-zero EPS years.
+
+Open the `.html` file in any browser. Use browser **Print → Save as PDF** for a hard copy. No extra dependencies — the report is pure HTML/CSS/JS with Google Fonts loaded via CDN.
 
 ---
 
@@ -373,6 +404,13 @@ Infra       uv, python-dotenv, pytest
 - **Bank / financial sector IS**: banks (e.g. HK-listed Chinese banks) use a different income statement structure — no Cost of Revenue, Gross Profit, Operating Income, or EBITDA. These fields show N/A. Net Interest Income and other bank-specific line items are not currently mapped.
 - **Semi-annual reporters**: companies that publish only H1 and annual results (e.g. Lenovo 00992 HK) will show data only for Q2 and the annual column in the XLSX download. Q1, Q3, Q4 cells are blank — this reflects the company's actual reporting cadence, not a data gap.
 - **Quarterly data availability**: yfinance may not capture the most recent quarterly interim report for some non-US tickers (observed: Q3 2025 missing for China Construction Bank 00939 HK). Data appears once yfinance ingests the filing.
+
+**DCF Valuation**
+- **Beta relevering**: uses raw yfinance beta (already levered); Damodaran unlevered/relevered beta is not applied
+- **Non-US tickers**: CRP is added to ERP, but the risk-free rate stays US 10Y Treasury — a local sovereign yield would be more appropriate
+- **Cyclical / loss-making companies**: negative historical FCFF (e.g. companies with large restructuring charges) propagates into projections; treat the output as directional only
+- **GAAP only**: no non-GAAP adjustments — stock-based compensation, restructuring costs, and acquired-intangible amortisation are not stripped out
+- **Data source fallback**: if the US Treasury or Damodaran fetch fails, hardcoded constants are used (Rf = 4.3%, ERP = 4.46%); a footnote appears in the KPI strip
 
 **FX**
 - **FRD forward rates**: computed from hardcoded approximate benchmark rates, not live OIS/SOFR swap points — directionally correct but not trading-grade
