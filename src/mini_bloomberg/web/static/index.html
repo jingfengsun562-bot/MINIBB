@@ -733,7 +733,7 @@
     <div class="sidebar-section">
       <span class="sidebar-label">Equity Functions</span>
       <div class="fn-tabs" id="fn-tabs">
-        <div class="fn-tab active" data-fn="DES">DES</div>
+        <div class="fn-tab" data-fn="DES">DES</div>
         <div class="fn-tab" data-fn="FA">FA</div>
         <div class="fn-tab" data-fn="GP">GP</div>
         <div class="fn-tab" data-fn="ANR">ANR</div>
@@ -1193,6 +1193,159 @@ function renderFXIP(data, cmd) {
   </div>`;
 }
 
+function renderGP(data, cmd) {
+  const d    = data.data || {};
+  const bars = (d.bars || []).filter(b => b.close != null);
+  const sym  = d.symbol || '';
+  const cur  = data.currency || d.currency || '';
+  const curSym = {'USD':'$','EUR':'€','GBP':'£','JPY':'¥','HKD':'HK$','CNY':'¥'}[cur] || (cur ? cur+' ' : '');
+  const lookback = data.lookback || bars.length;
+  const sliced = bars.slice(-lookback);
+
+  if (!sliced.length) return renderGeneric(data, cmd);
+
+  const closes  = sliced.map(b => b.close);
+  const opens   = sliced.map(b => b.open   ?? b.close);
+  const highs   = sliced.map(b => b.high   ?? b.close);
+  const lows    = sliced.map(b => b.low    ?? b.close);
+  const volumes = sliced.map(b => b.volume ?? 0);
+  const dates   = sliced.map(b => b.date);
+
+  const first = closes[0], last = closes[closes.length - 1];
+  const pctChg = first ? (last - first) / first * 100 : 0;
+  const pHigh = data.period_high ?? Math.max(...highs);
+  const pLow  = data.period_low  ?? Math.min(...lows);
+  const avgVol = data.avg_volume;
+  const avgVolStr = avgVol >= 1e6 ? (avgVol/1e6).toFixed(1)+'M' : avgVol >= 1e3 ? (avgVol/1e3).toFixed(0)+'K' : (avgVol||0).toLocaleString();
+
+  // ── Responsive canvas dimensions ──────────────────────────────────────────
+  const W = 760, H_PRICE = 260, H_VOL = 70, PAD = {l:58, r:16, t:32, b:24};
+  const priceW = W - PAD.l - PAD.r;
+  const priceH = H_PRICE - PAD.t - PAD.b;
+  const volH   = H_VOL - 14;
+  const n = sliced.length;
+  const barW = Math.max(1, Math.min(10, (priceW / n) - 1));
+
+  // Price range
+  const priceMin = Math.min(...lows)   * 0.998;
+  const priceMax = Math.max(...highs)  * 1.002;
+  const volMax   = Math.max(...volumes) * 1.05 || 1;
+
+  const px = i => PAD.l + (i + 0.5) * (priceW / n);
+  const py = v => PAD.t + priceH - (v - priceMin) / (priceMax - priceMin) * priceH;
+  const vy = v => volH  - v / volMax * volH;
+
+  // ── SMA helper ─────────────────────────────────────────────────────────────
+  const sma = (arr, w) => arr.map((_, i) =>
+    i + 1 < w ? null : arr.slice(i + 1 - w, i + 1).reduce((a, b) => a + b, 0) / w
+  );
+  const sma50  = sma(closes, 50);
+  const sma200 = sma(closes, 200);
+
+  const polyline = (pts) => {
+    let segments = '', buf = [];
+    pts.forEach((p, i) => {
+      if (p === null) { if (buf.length > 1) segments += `<polyline points="${buf.join(' ')}" fill="none" stroke-width="1.2"/>`; buf = []; return; }
+      buf.push(`${px(i).toFixed(1)},${py(p).toFixed(1)}`);
+    });
+    if (buf.length > 1) segments += `<polyline points="${buf.join(' ')}" fill="none" stroke-width="1.2"/>`;
+    return segments;
+  };
+
+  // ── Tick labels ────────────────────────────────────────────────────────────
+  const tickEvery = Math.ceil(n / 6);
+  let xTicks = '', yTicks = '', gridH = '', gridV = '';
+
+  for (let i = 0; i < n; i += tickEvery) {
+    const x = px(i);
+    const label = dates[i] ? dates[i].slice(0, 7) : '';
+    xTicks += `<text x="${x.toFixed(1)}" y="${(PAD.t + priceH + 16).toFixed(1)}" text-anchor="middle" font-size="9" fill="#666">${label}</text>`;
+    gridV  += `<line x1="${x.toFixed(1)}" y1="${PAD.t}" x2="${x.toFixed(1)}" y2="${(PAD.t + priceH).toFixed(1)}" stroke="#333" stroke-width="0.5"/>`;
+  }
+
+  const ySteps = 5;
+  for (let s = 0; s <= ySteps; s++) {
+    const v = priceMin + (priceMax - priceMin) * (s / ySteps);
+    const y = py(v);
+    const label = v >= 1000 ? v.toFixed(0) : v.toFixed(2);
+    yTicks += `<text x="${(PAD.l - 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#666">${label}</text>`;
+    gridH  += `<line x1="${PAD.l}" y1="${y.toFixed(1)}" x2="${(W - PAD.r).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#333" stroke-width="0.5"/>`;
+  }
+
+  // ── Candlesticks ──────────────────────────────────────────────────────────
+  let candles = '';
+  for (let i = 0; i < n; i++) {
+    const x   = px(i);
+    const o   = py(opens[i]), c = py(closes[i]), h = py(highs[i]), l = py(lows[i]);
+    const up  = closes[i] >= opens[i];
+    const col = up ? '#00e676' : '#ff5252';
+    const top = Math.min(o, c), bodyH = Math.max(1, Math.abs(o - c));
+    candles += `<line x1="${x.toFixed(1)}" y1="${h.toFixed(1)}" x2="${x.toFixed(1)}" y2="${l.toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    candles += `<rect x="${(x - barW/2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+  }
+
+  // ── Volume bars ───────────────────────────────────────────────────────────
+  let volBars = '';
+  for (let i = 0; i < n; i++) {
+    const x  = px(i);
+    const vh = vy(volumes[i]);
+    const col = closes[i] >= opens[i] ? 'rgba(0,230,118,0.5)' : 'rgba(255,82,82,0.5)';
+    volBars += `<rect x="${(x - barW/2).toFixed(1)}" y="${vh.toFixed(1)}" width="${barW.toFixed(1)}" height="${(volH - vh).toFixed(1)}" fill="${col}"/>`;
+  }
+
+  // ── Last price line ───────────────────────────────────────────────────────
+  const lastY = py(last).toFixed(1);
+  const lCol  = pctChg >= 0 ? '#00e676' : '#ff5252';
+  const lastLine = `<line x1="${PAD.l}" y1="${lastY}" x2="${(W-PAD.r).toFixed(1)}" y2="${lastY}" stroke="${lCol}" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.6"/>`;
+  const lastLabel = `<text x="${(W-PAD.r+2).toFixed(1)}" y="${(+lastY+3).toFixed(1)}" font-size="9" fill="${lCol}">${curSym}${last.toFixed(2)}</text>`;
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+  let legend = '';
+  if (sma50.some(v => v !== null))
+    legend += `<rect x="${PAD.l}" y="8" width="14" height="2" fill="#ffaf00"/><text x="${PAD.l+18}" y="14" font-size="9" fill="#ffaf00">SMA50</text>`;
+  if (sma200.some(v => v !== null))
+    legend += `<rect x="${PAD.l+70}" y="8" width="14" height="2" fill="#00b8d4"/><text x="${PAD.l+88}" y="14" font-size="9" fill="#00b8d4">SMA200</text>`;
+
+  const priceSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H_PRICE}" width="100%">
+  ${gridH}${gridV}${xTicks}${yTicks}
+  ${candles}
+  <g stroke="#ffaf00">${polyline(sma50)}</g>
+  <g stroke="#00b8d4">${polyline(sma200)}</g>
+  ${lastLine}${lastLabel}${legend}
+</svg>`;
+
+  const volSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H_VOL}" width="100%">
+  <text x="${(PAD.l-4).toFixed(1)}" y="10" text-anchor="end" font-size="8" fill="#555">Vol</text>
+  ${volBars}
+</svg>`;
+
+  const chgColor = pctChg >= 0 ? 'var(--green)' : 'var(--red)';
+  const chgArrow = pctChg >= 0 ? '▲' : '▼';
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-ticker">${escHtml(sym)}</div>
+    <div style="display:flex;gap:24px;align-items:baseline;margin:4px 0 10px;flex-wrap:wrap;">
+      <span style="font-size:22px;font-weight:700;color:var(--text)">${curSym}${last.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span style="font-size:14px;color:${chgColor};font-weight:600">${chgArrow} ${Math.abs(pctChg).toFixed(2)}%</span>
+      <span style="font-size:10px;color:var(--text3)">${lookback}d return</span>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;overflow:hidden;padding:4px 0 0">
+      ${priceSvg}
+      <div style="border-top:1px solid #2a2a2a;padding:0">${volSvg}</div>
+    </div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--text3)">
+      <span><span style="color:var(--text2)">${lookback}d High</span>  ${curSym}${pHigh.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span><span style="color:var(--text2)">${lookback}d Low</span>  ${curSym}${pLow.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span><span style="color:var(--text2)">Avg Vol</span>  ${avgVolStr}</span>
+      <span><span style="color:var(--text2)">Bars</span>  ${sliced.length}</span>
+      <span><span style="color:var(--text2)">Period</span>  ${dates[0]} → ${dates[dates.length-1]}</span>
+    </div>
+  </div>`;
+}
+
 function renderGeneric(data, cmd) {
   const d = data.data || data;
 
@@ -1344,6 +1497,7 @@ async function executeCommand(raw) {
       case 'ANR':  html = renderANR(data, cmd); break;
       case 'COMP': html = renderCOMP(data, cmd); break;
       case 'FXIP': html = renderFXIP(data, cmd); break;
+      case 'GP':   html = renderGP(data, cmd); break;
       default:     html = renderGeneric(data, cmd);
     }
     showOutput(html);
