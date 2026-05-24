@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MINI-BLOOMBERG // Web Terminal</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -27,7 +28,7 @@
     --mono:      'IBM Plex Mono', monospace;
     --sans:      'IBM Plex Sans', sans-serif;
     --sidebar-w: 200px;
-    --agent-w:   280px;
+    --agent-w:   560px;
     --header-h:  55px;
     --cmd-h:     52px;
   }
@@ -253,6 +254,7 @@
   /* ── RESULT PANEL ── */
   #result-panel {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -471,6 +473,8 @@
   /* ── AGENT PANEL ── */
   #agent-panel {
     width: var(--agent-w);
+    min-width: var(--agent-w);
+    max-width: var(--agent-w);
     background: var(--bg2);
     border-left: 1px solid var(--border);
     flex-shrink: 0;
@@ -535,6 +539,99 @@
     color: var(--text);
     padding: 2px 0;
   }
+
+  /* markdown rendering inside agent responses */
+  .agent-msg-assistant h1,
+  .agent-msg-assistant h2,
+  .agent-msg-assistant h3 {
+    font-family: var(--mono);
+    color: var(--cyan);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border2);
+    padding-bottom: 3px;
+    margin: 10px 0 6px;
+  }
+  .agent-msg-assistant h1 { font-size: 11px; }
+  .agent-msg-assistant p {
+    margin: 5px 0;
+    line-height: 1.65;
+  }
+  .agent-msg-assistant strong {
+    color: var(--yellow);
+    font-weight: 700;
+  }
+  .agent-msg-assistant em {
+    color: var(--text2);
+    font-style: italic;
+  }
+  .agent-msg-assistant ul, .agent-msg-assistant ol {
+    padding-left: 16px;
+    margin: 5px 0;
+  }
+  .agent-msg-assistant li {
+    margin: 3px 0;
+    line-height: 1.6;
+  }
+  .agent-msg-assistant code {
+    background: var(--bg3);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--border2);
+  }
+  .agent-msg-assistant pre {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    padding: 8px 10px;
+    overflow-x: auto;
+    margin: 6px 0;
+  }
+  .agent-msg-assistant pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 10px;
+    line-height: 1.6;
+  }
+  .agent-msg-assistant blockquote {
+    border-left: 2px solid var(--yellow2);
+    padding: 4px 10px;
+    color: var(--text2);
+    background: var(--bg3);
+    margin: 6px 0;
+    font-style: italic;
+  }
+  .agent-msg-assistant table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+    font-size: 10px;
+  }
+  .agent-msg-assistant th {
+    background: var(--bg3);
+    color: var(--yellow);
+    font-weight: 700;
+    padding: 5px 8px;
+    border: 1px solid var(--border2);
+    text-align: left;
+  }
+  .agent-msg-assistant td {
+    padding: 4px 8px;
+    border: 1px solid var(--border2);
+    color: var(--text);
+  }
+  .agent-msg-assistant tr:nth-child(even) td { background: var(--bg3); }
+  .agent-msg-assistant hr {
+    border: none;
+    border-top: 1px solid var(--border2);
+    margin: 10px 0;
+  }
+  .agent-msg-assistant a { color: var(--cyan); text-decoration: none; }
+  .agent-msg-assistant a:hover { text-decoration: underline; }
 
   .agent-msg-thinking {
     color: var(--cyan);
@@ -1172,6 +1269,261 @@ function renderCOMP(data, cmd) {
   </div>`;
 }
 
+function renderGP(data, cmd) {
+  const d = data.data || {};
+  const allBars = d.bars || [];
+  if (!allBars.length) return renderGeneric(data, cmd);
+
+  const lookback = data.lookback || 365;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookback);
+  let bars = allBars.filter(b => b.date && new Date(b.date) >= cutoff);
+  if (bars.length < 10) bars = allBars.slice(-Math.min(allBars.length, 250));
+  if (!bars.length) return renderGeneric(data, cmd);
+
+  const sym = d.symbol || '';
+  const cur = d.currency || '';
+  const n = bars.length;
+
+  const closes  = bars.map(b => b.close  != null ? b.close  : 0);
+  const opens   = bars.map(b => b.open   != null ? b.open   : b.close || 0);
+  const highs   = bars.map(b => b.high   != null ? b.high   : b.close || 0);
+  const lows    = bars.map(b => b.low    != null ? b.low    : b.close || 0);
+  const volumes = bars.map(b => b.volume != null ? b.volume : 0);
+
+  const maxP  = Math.max(...highs);
+  const minP  = Math.min(...lows);
+  const range = maxP - minP || 1;
+
+  // SMA
+  function sma(arr, period) {
+    return arr.map((_, i) => {
+      if (i < period - 1) return null;
+      let s = 0; for (let j = i - period + 1; j <= i; j++) s += arr[j];
+      return s / period;
+    });
+  }
+  const sma50  = sma(closes, 50);
+  const sma200 = sma(closes, 200);
+
+  // Layout
+  const W = 820, PAD_L = 62, PAD_R = 50, PAD_T = 16, PAD_B = 22;
+  const MAIN_H = 210, VOL_H = 52, GAP = 6;
+  const H = PAD_T + MAIN_H + GAP + VOL_H + PAD_B;
+  const chartW = W - PAD_L - PAD_R;
+
+  const xOf = i => PAD_L + (i / Math.max(n - 1, 1)) * chartW;
+  const yOf = v => PAD_T + (1 - (v - minP) / range) * MAIN_H;
+  const volMax = Math.max(...volumes) || 1;
+  const volBottom = PAD_T + MAIN_H + GAP + VOL_H;
+  const yVol = v => PAD_T + MAIN_H + GAP + VOL_H * (1 - v / volMax);
+
+  const candleW = Math.max(1, Math.min(9, chartW / n * 0.65));
+
+  // Price format
+  const fmtPx  = v => cur === 'JPY' ? Math.round(v).toLocaleString() : v.toFixed(2);
+  const fmtVol = v => v >= 1e9 ? (v/1e9).toFixed(1)+'B' : v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(v);
+
+  const lastClose  = closes[closes.length - 1];
+  const firstClose = closes[0];
+  const totalChg   = firstClose ? (lastClose - firstClose) / firstClose * 100 : null;
+  const chgCls     = totalChg != null ? (totalChg >= 0 ? 'price-up' : 'price-down') : '';
+  const chgStr     = totalChg != null ? (totalChg >= 0 ? '+' : '') + totalChg.toFixed(2) + '%' : 'N/A';
+  const upTrend    = totalChg != null && totalChg >= 0;
+  const priceStr   = (cur === 'USD' ? '$' : '') + fmtPx(lastClose);
+  const avgVol     = volumes.reduce((a, b) => a + b, 0) / (volumes.filter(v => v > 0).length || 1);
+  const periodStr  = bars[0].date.slice(0,10) + ' → ' + bars[n-1].date.slice(0,10);
+
+  // ── Y-axis grid + 52W high dashed line ──
+  let yGridSvg = '';
+  for (let i = 0; i <= 5; i++) {
+    const v = minP + range * i / 5;
+    const y = yOf(v).toFixed(1);
+    yGridSvg += '<line x1="' + PAD_L + '" y1="' + y + '" x2="' + (PAD_L+chartW) + '" y2="' + y + '" stroke="var(--border2)" stroke-width="0.5" stroke-dasharray="3,3"/>';
+    yGridSvg += '<text x="' + (PAD_L-5) + '" y="' + y + '" text-anchor="end" dominant-baseline="middle" fill="var(--text3)" font-size="9">' + fmtPx(v) + '</text>';
+  }
+  // 52W high dashed
+  const highY = yOf(maxP).toFixed(1);
+  yGridSvg += '<line x1="' + PAD_L + '" y1="' + highY + '" x2="' + (PAD_L+chartW) + '" y2="' + highY + '" stroke="#c9a22766" stroke-width="1" stroke-dasharray="5,4"/>';
+  yGridSvg += '<text x="' + (PAD_L-5) + '" y="' + highY + '" text-anchor="end" dominant-baseline="middle" fill="#c9a227" font-size="8">' + fmtPx(maxP) + '</text>';
+
+  // Current price pill on right axis
+  const cpY = yOf(lastClose).toFixed(1);
+  const cpColor = upTrend ? '#22c55e' : '#ef4444';
+  yGridSvg += '<rect x="' + (PAD_L+chartW+2) + '" y="' + (parseFloat(cpY)-8) + '" width="' + (PAD_R-4) + '" height="16" fill="' + cpColor + '" rx="2"/>';
+  yGridSvg += '<text x="' + (PAD_L+chartW+PAD_R/2) + '" y="' + cpY + '" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="9" font-weight="bold">' + fmtPx(lastClose) + '</text>';
+
+  // ── X-axis monthly labels ──
+  let xLabelSvg = '';
+  let lastMonth = '';
+  bars.forEach((b, i) => {
+    const mon = b.date ? b.date.slice(0, 7) : '';
+    if (mon && mon !== lastMonth) {
+      lastMonth = mon;
+      const x = xOf(i).toFixed(1);
+      xLabelSvg += '<text x="' + x + '" y="' + (H-6) + '" text-anchor="middle" fill="var(--text3)" font-size="8">' + mon + '</text>';
+    }
+  });
+
+  // ── Candlesticks ──
+  let candlesSvg = '';
+  bars.forEach((b, i) => {
+    const x    = xOf(i);
+    const isUp = (b.close || 0) >= (b.open || 0);
+    const col  = isUp ? '#22c55e' : '#ef4444';
+    const yH   = yOf(highs[i]).toFixed(1);
+    const yL   = yOf(lows[i]).toFixed(1);
+    const yO   = yOf(opens[i]);
+    const yC   = yOf(closes[i]);
+    const bTop = Math.min(yO, yC).toFixed(1);
+    const bH   = Math.max(Math.abs(yC - yO), 1).toFixed(1);
+    candlesSvg += '<line x1="' + x.toFixed(1) + '" y1="' + yH + '" x2="' + x.toFixed(1) + '" y2="' + yL + '" stroke="' + col + '" stroke-width="1"/>';
+    candlesSvg += '<rect x="' + (x - candleW/2).toFixed(1) + '" y="' + bTop + '" width="' + candleW.toFixed(1) + '" height="' + bH + '" fill="' + col + '"/>';
+  });
+
+  // ── SMA lines ──
+  function smaPath(vals, col, sw) {
+    let path = '', started = false;
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      const x = xOf(i).toFixed(1), y = yOf(v).toFixed(1);
+      path += started ? ' L ' + x + ',' + y : 'M ' + x + ',' + y;
+      started = true;
+    });
+    return path ? '<path d="' + path + '" fill="none" stroke="' + col + '" stroke-width="' + sw + '" opacity="0.9"/>' : '';
+  }
+  const sma50svg  = smaPath(sma50,  '#f59e0b', 1.5);
+  const sma200svg = smaPath(sma200, '#38bdf8', 1.5);
+
+  // ── Volume bars ──
+  let volSvg = '';
+  bars.forEach((b, i) => {
+    const x    = xOf(i);
+    const isUp = (b.close || 0) >= (b.open || 0);
+    const col  = isUp ? '#22c55e55' : '#ef444455';
+    const yV   = yVol(volumes[i]).toFixed(1);
+    const bH   = Math.max(volBottom - parseFloat(yV), 1).toFixed(1);
+    volSvg += '<rect x="' + (x - candleW/2).toFixed(1) + '" y="' + yV + '" width="' + Math.max(candleW, 1).toFixed(1) + '" height="' + bH + '" fill="' + col + '"/>';
+  });
+
+  // ── SMA legend ──
+  const LX = PAD_L + 8, LY = PAD_T + 5;
+  const legendSvg = '<rect x="' + LX + '" y="' + LY + '" width="102" height="20" fill="var(--bg)" rx="2" opacity="0.8"/>'
+    + '<line x1="' + (LX+5) + '" y1="' + (LY+10) + '" x2="' + (LX+17) + '" y2="' + (LY+10) + '" stroke="#f59e0b" stroke-width="1.5"/>'
+    + '<text x="' + (LX+20) + '" y="' + (LY+14) + '" fill="var(--text3)" font-size="8">SMA50</text>'
+    + '<line x1="' + (LX+52) + '" y1="' + (LY+10) + '" x2="' + (LX+64) + '" y2="' + (LY+10) + '" stroke="#38bdf8" stroke-width="1.5"/>'
+    + '<text x="' + (LX+67) + '" y="' + (LY+14) + '" fill="var(--text3)" font-size="8">SMA200</text>';
+
+  // ── Vol label ──
+  const volLabelSvg = '<text x="' + (PAD_L-5) + '" y="' + (PAD_T+MAIN_H+GAP+10) + '" text-anchor="end" fill="var(--text3)" font-size="8">Vol</text>';
+
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="display:block;width:100%;max-width:100%;overflow:visible">'
+    + '<defs>'
+    + '<clipPath id="gpMain"><rect x="' + PAD_L + '" y="' + PAD_T + '" width="' + chartW + '" height="' + MAIN_H + '"/></clipPath>'
+    + '<clipPath id="gpVol"><rect x="' + PAD_L + '" y="' + (PAD_T+MAIN_H+GAP) + '" width="' + chartW + '" height="' + VOL_H + '"/></clipPath>'
+    + '</defs>'
+    + '<rect x="' + PAD_L + '" y="' + PAD_T + '" width="' + chartW + '" height="' + MAIN_H + '" fill="var(--bg3)" rx="2"/>'
+    + '<rect x="' + PAD_L + '" y="' + (PAD_T+MAIN_H+GAP) + '" width="' + chartW + '" height="' + VOL_H + '" fill="var(--bg3)" rx="2"/>'
+    + yGridSvg
+    + volLabelSvg
+    + '<g clip-path="url(#gpMain)">' + candlesSvg + sma50svg + sma200svg + '</g>'
+    + '<g clip-path="url(#gpVol)">' + volSvg + '</g>'
+    + legendSvg
+    + xLabelSvg
+    + '</svg>';
+
+  return '<div class="output-block">'
+    + '<div class="cmd-echo">' + escHtml(cmd) + '</div>'
+    + '<div class="output-ticker">' + escHtml(sym) + '</div>'
+    + '<div style="display:flex;gap:14px;align-items:baseline;margin:4px 0 10px;flex-wrap:wrap;">'
+    + '  <span style="font-size:22px;font-weight:700;color:var(--text)">' + escHtml(priceStr) + '</span>'
+    + '  <span class="' + chgCls + '" style="font-size:14px;">' + (upTrend ? '&#9650;' : '&#9660;') + ' ' + chgStr + '</span>'
+    + '  <span style="font-size:11px;color:var(--text3)">' + lookback + 'd return</span>'
+    + '</div>'
+    + '<div style="overflow-x:auto;">' + svg + '</div>'
+    + '<div style="font-size:10px;color:var(--text3);margin-top:6px;display:flex;gap:20px;flex-wrap:wrap;">'
+    + '  <span>' + lookback + 'd High&nbsp;<strong style="color:var(--text2)">' + fmtPx(maxP) + '</strong></span>'
+    + '  <span>' + lookback + 'd Low&nbsp;<strong style="color:var(--text2)">' + fmtPx(minP) + '</strong></span>'
+    + '  <span>Avg Vol&nbsp;<strong style="color:var(--text2)">' + fmtVol(avgVol) + '</strong></span>'
+    + '  <span>Bars&nbsp;<strong style="color:var(--text2)">' + n + '</strong></span>'
+    + '  <span>Period&nbsp;<strong style="color:var(--text2)">' + periodStr + '</strong></span>'
+    + '</div>'
+    + '</div>';
+}
+
+function renderRV(data, cmd) {
+  const d = data.data || {};
+  const val = d.valuation || {};
+  const ratios = d.ratios || {};
+  const peers = d.peers || [];
+  const sym = d.symbol || '';
+  const cur = d.currency || '';
+
+  const fmtMgn = v => {
+    if (v == null) return 'N/A';
+    const pct = Math.abs(v) > 1 ? v : v * 100;
+    return pct.toFixed(1) + '%';
+  };
+
+  const displayPeers = peers.slice(0, 5);
+
+  const headerCols = [
+    `<th style="color:var(--yellow)">${escHtml(sym)}</th>`,
+    ...displayPeers.map(p => `<th title="${escHtml(p.name||p.symbol)}">${escHtml(p.symbol)}</th>`)
+  ].join('');
+
+  function peerCell(v, fmtFn) {
+    return `<td style="text-align:right">${fmtFn(v)}</td>`;
+  }
+
+  function buildRows(metrics) {
+    return metrics.map(([label, subjectVal, peerVals, fmtFn]) => {
+      const subjectCell = `<td style="text-align:right;color:var(--yellow)">${fmtFn(subjectVal)}</td>`;
+      const peerCells = displayPeers.map((p, i) => peerCell(peerVals[i], fmtFn)).join('');
+      return `<tr><td>${label}</td>${subjectCell}${peerCells}</tr>`;
+    }).join('');
+  }
+
+  const valMetrics = [
+    ['P/E',        val.pe_ratio,        peers.map(p => p.pe_ratio),        fmtX],
+    ['EV/EBITDA',  val.ev_to_ebitda,    peers.map(p => p.ev_to_ebitda),    fmtX],
+    ['EV/Sales',   val.ev_to_sales,     peers.map(() => null),             fmtX],
+    ['P/B',        val.pb_ratio,        peers.map(p => p.pb_ratio),        fmtX],
+    ['FCF Yield',  val.fcf_yield,       peers.map(p => p.fcf_yield),       fmtPct],
+    ['Div. Yield', val.dividend_yield,  peers.map(p => p.dividend_yield),  fmtMgn],
+  ];
+
+  const marginMetrics = [
+    ['Gross Margin',   ratios.gross_margin,      peers.map(p => p.gross_margin),      fmtMgn],
+    ['Op. Margin',     ratios.operating_margin,  peers.map(p => p.operating_margin),  fmtMgn],
+    ['Net Margin',     ratios.net_margin,        peers.map(p => p.net_margin),        fmtMgn],
+    ['EBITDA Margin',  ratios.ebitda_margin,     peers.map(() => null),              fmtMgn],
+    ['ROE',            ratios.roe,               peers.map(() => null),              fmtMgn],
+    ['ROA',            ratios.roa,               peers.map(() => null),              fmtMgn],
+  ];
+
+  const priceStr = val.current_price != null
+    ? (cur === 'USD' ? '$' : '') + val.current_price.toFixed(2)
+    : 'N/A';
+
+  return `<div class="output-block">
+    <div class="cmd-echo">${escHtml(cmd)}</div>
+    <div class="output-header">RELATIVE VALUE — ${escHtml(sym)}</div>
+    ${val.current_price != null ? `<div style="color:var(--text2);font-size:11px;margin-bottom:8px;">Price: <span style="color:var(--yellow)">${priceStr}</span> &nbsp;·&nbsp; Mkt Cap: ${fmt(val.market_cap, cur)}</div>` : ''}
+    <div style="color:var(--text3);font-size:10px;font-weight:600;letter-spacing:0.05em;margin:8px 0 4px;">VALUATION MULTIPLES</div>
+    <table class="output-table">
+      <thead><tr><th>Metric</th>${headerCols}</tr></thead>
+      <tbody>${buildRows(valMetrics)}</tbody>
+    </table>
+    <div style="color:var(--text3);font-size:10px;font-weight:600;letter-spacing:0.05em;margin:12px 0 4px;">PROFITABILITY</div>
+    <table class="output-table">
+      <thead><tr><th>Metric</th>${headerCols}</tr></thead>
+      <tbody>${buildRows(marginMetrics)}</tbody>
+    </table>
+    ${peers.length > 5 ? `<div style="color:var(--text3);font-size:10px;margin-top:6px;">+ ${peers.length - 5} more peers not shown</div>` : ''}
+  </div>`;
+}
+
 function renderFXIP(data, cmd) {
   const rates = data.data?.rates || data.data || [];
   if (!Array.isArray(rates) || !rates.length) return renderGeneric(data, cmd);
@@ -1341,8 +1693,10 @@ async function executeCommand(raw) {
     switch (fnCmd) {
       case 'DES':  html = renderDES(data, cmd); break;
       case 'FA':   html = renderFA(data, cmd); break;
+      case 'GP':   html = renderGP(data, cmd); break;
       case 'ANR':  html = renderANR(data, cmd); break;
       case 'COMP': html = renderCOMP(data, cmd); break;
+      case 'RV':   html = renderRV(data, cmd); break;
       case 'FXIP': html = renderFXIP(data, cmd); break;
       default:     html = renderGeneric(data, cmd);
     }
@@ -1406,6 +1760,18 @@ function addHistory(cmd) {
   ).join('');
 }
 
+// ── marked.js config ──────────────────────────────────────────────────────────
+if (typeof marked !== 'undefined') {
+  marked.setOptions({ breaks: true, gfm: true });
+}
+function mdToHtml(text) {
+  if (typeof marked !== 'undefined') {
+    return marked.parse(text);
+  }
+  // Fallback: escape and preserve line breaks
+  return escHtml(text).replace(/\n/g, '<br>');
+}
+
 // ── Agent panel ────────────────────────────────────────────────────────────────
 function appendAgentMsg(type, text) {
   const msgs = document.getElementById('agent-messages');
@@ -1416,6 +1782,8 @@ function appendAgentMsg(type, text) {
     div.innerHTML = `<span class="spinner"></span> <span>${escHtml(text)}</span>`;
   } else if (type === 'tool') {
     div.innerHTML = escHtml(text);
+  } else if (type === 'assistant') {
+    div.innerHTML = mdToHtml(text);
   } else {
     div.textContent = text;
   }

@@ -1,4 +1,5 @@
 from mini_bloomberg.core.errors import MiniBloombergError
+from mini_bloomberg.data.equity_price import get_price_history
 from mini_bloomberg.data.equity_profile import get_profile
 from mini_bloomberg.functions.base import BloombergFunction
 
@@ -11,7 +12,28 @@ class DES(BloombergFunction):
         try:
             t = self._resolve_ticker(ticker)
             profile = get_profile(t)
-            return {"status": "ok", "data": profile.model_dump()}
+            data = profile.model_dump()
+
+            # Augment with live price and change
+            try:
+                history = get_price_history(t, days=5)
+                if history.bars:
+                    last = history.bars[-1]
+                    data["last_price"] = last.close
+                    data["change_pct"] = last.change_percent
+            except Exception:
+                pass
+
+            # Augment with PE and EV/EBITDA from yfinance
+            try:
+                import yfinance as yf
+                info = yf.Ticker(t.yfinance_symbol).info
+                data["pe_ratio"] = info.get("trailingPE")
+                data["ev_to_ebitda"] = info.get("enterpriseToEbitda")
+            except Exception:
+                pass
+
+            return {"status": "ok", "data": data}
         except MiniBloombergError as e:
             return {"status": "error", "message": str(e)}
         except Exception as e:

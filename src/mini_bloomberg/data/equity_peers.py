@@ -6,6 +6,7 @@ Peers router for COMP.
 """
 
 import asyncio
+import concurrent.futures
 from typing import Optional
 
 import httpx
@@ -24,7 +25,17 @@ def get_comparables(ticker: Ticker) -> Comparables:
         return Comparables(symbol=ticker.symbol, peers=[])
 
     capped = peers_raw[:8]
-    peers = asyncio.run(_enrich_peers_async(capped))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # FastAPI context: run coroutine in a fresh thread with its own event loop
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            peers = pool.submit(asyncio.run, _enrich_peers_async(capped)).result()
+    else:
+        peers = asyncio.run(_enrich_peers_async(capped))
 
     # OpenBB fallback for peers where FMP returned 402 (revenue is still None)
     raw_by_sym = {p["symbol"]: p for p in capped}
