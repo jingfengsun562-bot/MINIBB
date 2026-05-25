@@ -198,6 +198,17 @@ def render_fa(result: dict) -> None:
 
 # ─── GP ───────────────────────────────────────────────────────────────────────
 
+def _sma(values: list[float], window: int) -> list[Optional[float]]:
+    """Compute a simple moving average; pads the front with None."""
+    result: list[Optional[float]] = []
+    for i, _ in enumerate(values):
+        if i + 1 < window:
+            result.append(None)
+        else:
+            result.append(sum(values[i + 1 - window : i + 1]) / window)
+    return result
+
+
 def render_gp(result: dict) -> None:
     if result["status"] == "error":
         console.print(f"[{RED}]GP ERROR:[/{RED}] {result['message']}")
@@ -210,9 +221,10 @@ def render_gp(result: dict) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    d = result["data"]
-    bars = d.get("bars", [])
-    symbol = d.get("symbol", "")
+    d       = result["data"]
+    bars    = d.get("bars", [])
+    symbol  = d.get("symbol", "")
+    currency = result.get("currency") or d.get("currency") or ""
     lookback = result.get("lookback", len(bars))
 
     if not bars:
@@ -220,29 +232,83 @@ def render_gp(result: dict) -> None:
         return
 
     bars = bars[-lookback:]
-    dates = [b["date"] for b in bars]
-    closes = [b["close"] for b in bars if b.get("close") is not None]
 
-    if not closes:
+    # ── Extract OHLCV (skip bars with missing close) ───────────────────────────
+    valid = [b for b in bars if b.get("close") is not None]
+    if not valid:
         console.print(f"[{RED}]GP:[/{RED}] No close prices in data.")
         return
 
-    pct_chg = ((closes[-1] - closes[0]) / closes[0] * 100) if len(closes) > 1 else 0
-    chg_color = GREEN if pct_chg >= 0 else RED
+    dates   = [b["date"] for b in valid]
+    opens   = [b.get("open")   or b["close"] for b in valid]
+    highs   = [b.get("high")   or b["close"] for b in valid]
+    lows    = [b.get("low")    or b["close"] for b in valid]
+    closes  = [b["close"] for b in valid]
+    volumes = [b.get("volume") or 0 for b in valid]
 
+    pct_chg   = ((closes[-1] - closes[0]) / closes[0] * 100) if len(closes) > 1 else 0.0
+    chg_color = GREEN if pct_chg >= 0 else RED
+    cur_sym   = _CURRENCY_SYMBOLS.get(currency, f"{currency} " if currency else "")
+
+    # ── SMAs (only draw when enough data exists) ───────────────────────────────
+    sma50  = _sma(closes, 50)
+    sma200 = _sma(closes, 200)
+    idx    = list(range(1, len(closes) + 1))
+
+    # ── Candlestick chart (main) ───────────────────────────────────────────────
     plt.clf()
-    plt.plot_size(100, 20)
+    plt.subplots(2, 1)        # 2 rows, 1 column
+
+    # Row 1 — OHLC candlestick + SMAs
+    plt.subplot(1, 1)
+    plt.plot_size(110, 22)
     plt.theme("dark")
-    plt.plot(closes, color="green")
-    plt.title(f"{symbol} — {lookback}d Price (close)")
-    plt.xlabel("Days")
+    plt.title(f"{symbol}  {cur_sym}{closes[-1]:,.2f}  ({pct_chg:+.2f}%  {lookback}d)")
     plt.ylabel("Price")
+    plt.candlestick(
+        dates,
+        {"Open": opens, "Close": closes, "High": highs, "Low": lows},
+        colors=["red", "green"],
+    )
+
+    # Overlay SMA lines (plotext uses numeric x when mixing with candlestick dates)
+    sma50_vals  = [v for v in sma50  if v is not None]
+    sma200_vals = [v for v in sma200 if v is not None]
+    sma50_idx   = [i for i, v in zip(idx, sma50)  if v is not None]
+    sma200_idx  = [i for i, v in zip(idx, sma200) if v is not None]
+
+    if sma50_vals:
+        plt.plot(sma50_idx,  sma50_vals,  color="yellow", label="SMA50")
+    if sma200_vals:
+        plt.plot(sma200_idx, sma200_vals, color="cyan",   label="SMA200")
+
+    # Row 2 — Volume bar chart
+    plt.subplot(2, 1)
+    plt.plot_size(110, 8)
+    plt.theme("dark")
+    plt.ylabel("Volume")
+    vol_colors = ["green" if c >= o else "red" for c, o in zip(closes, opens)]
+    plt.bar(idx, volumes, color=vol_colors, width=0.8)
+
     plt.show()
 
+    # ── Stats footer ──────────────────────────────────────────────────────────
+    period_high = result.get("period_high") or max(highs)
+    period_low  = result.get("period_low")  or min(lows)
+    avg_vol     = result.get("avg_volume")
+    avg_vol_str = f"{avg_vol / 1_000_000:.1f}M" if avg_vol and avg_vol >= 1_000_000 else (
+                  f"{avg_vol / 1_000:.0f}K"     if avg_vol else "N/A")
+
     console.print(
-        f"  [{DIM}]Last:[/{DIM}] [{GREEN}]{closes[-1]:.2f}[/{GREEN}]   "
+        f"  [{DIM}]Last:[/{DIM}] [{GREEN}]{cur_sym}{closes[-1]:,.2f}[/{GREEN}]   "
         f"[{DIM}]Change:[/{DIM}] [{chg_color}]{pct_chg:+.2f}%[/{chg_color}]   "
-        f"[{DIM}]Period:[/{DIM}] {dates[0]} → {dates[-1]}"
+        f"[{DIM}]{lookback}d High:[/{DIM}] {cur_sym}{period_high:,.2f}   "
+        f"[{DIM}]{lookback}d Low:[/{DIM}] {cur_sym}{period_low:,.2f}   "
+        f"[{DIM}]Avg Vol:[/{DIM}] {avg_vol_str}"
+    )
+    console.print(
+        f"  [{DIM}]Period:[/{DIM}] {dates[0]} → {dates[-1]}   "
+        f"[{DIM}]Bars:[/{DIM}] {len(valid)}"
     )
     console.print()
 
