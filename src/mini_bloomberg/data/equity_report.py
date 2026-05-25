@@ -92,7 +92,12 @@ def get_equity_report(ticker: Ticker, price_days: int = 90) -> EquityReport:
     try:
         news = fetch_company_news(ticker)
         company_name = report.profile.name if report.profile else None
-        report.insights = _generate_insights(ticker, news, report.financials, report.analyst, company_name)
+        report.insights = _generate_insights(
+            ticker, news, report.financials, report.analyst,
+            ratios_by_year=report.ratios_by_year,
+            dcf=report.dcf,
+            company_name=company_name,
+        )
     except Exception:
         pass
 
@@ -157,50 +162,115 @@ def _generate_insights(
     news: list[dict],
     fin: Optional[Financials],
     analyst,
+    ratios_by_year: list | None = None,
+    dcf=None,
     company_name: Optional[str] = None,
 ) -> InsightsData:
     """Call Claude (Haiku) to generate What happened? + Our thoughts. Cached 24 h."""
-    cache_key = f"insights:{ticker.symbol}:{ticker.exchange_code}:{date.today()}"
+    cache_key = f"insights2:{ticker.symbol}:{ticker.exchange_code}:{date.today()}"
     cached = _disk_cache.get(cache_key)
     if isinstance(cached, dict):
         return InsightsData(**cached)
 
-    # Use company name in prompts so the model identifies the right company.
-    # For non-US tickers the symbol alone (e.g. "00700") is ambiguous.
     label = company_name if company_name else ticker.symbol
 
     headlines = [f"[{n['date']}] {n['title']}" for n in news if n.get("title")]
     news_text = "\n".join(headlines) or "No recent news available."
 
-    fin_summary = ""
-    if fin and fin.income_statements:
-        for r in fin.income_statements[:2]:
-            fin_summary += (
-                f"FY{r.fiscal_year}: revenue={r.revenue}, "
-                f"net_income={r.net_income}, "
-                f"operating_income={r.operating_income}\n"
+    # ── Financial data block ───────────────────────────────────────────────────
+    def _b(v) -> str:
+        if v is None: return "N/A"
+        abs_v = abs(v)
+        s = "-" if v < 0 else ""
+        if abs_v >= 1e9:  return f"{s}${abs_v/1e9:.1f}B"
+        if abs_v >= 1e6:  return f"{s}${abs_v/1e6:.0f}M"
+        return f"{s}${abs_v:,.0f}"
+
+    def _pct(v) -> str:
+        return f"{v*100:.1f}%" if v is not None else "N/A"
+
+    def _f(v, dp=2) -> str:
+        return f"{v:.{dp}f}" if v is not None else "N/A"
+
+    fin_block = ""
+    if fin:
+        incs = fin.income_statements[:2]
+        bals = fin.balance_sheets[:2]
+        cfs  = fin.cash_flows[:2]
+
+        if incs:
+            fin_block += "INCOME STATEMENT\n"
+            for r in incs:
+                fin_block += (
+                    f"  FY{r.fiscal_year}: Rev={_b(r.revenue)} | GP={_b(r.gross_profit)} | "
+                    f"OpInc={_b(r.operating_income)} | NetInc={_b(r.net_income)} | "
+                    f"EBITDA={_b(r.ebitda)} | EPS={_f(r.eps_diluted)}\n"
+                )
+
+        if bals:
+            fin_block += "BALANCE SHEET\n"
+            for r in bals:
+                fin_block += (
+                    f"  FY{r.fiscal_year}: Assets={_b(r.total_assets)} | Equity={_b(r.total_equity)} | "
+                    f"Debt={_b(r.total_debt)} | Cash={_b(r.cash_and_equivalents)} | "
+                    f"NetDebt={_b(r.net_debt)}\n"
+                )
+
+        if cfs:
+            fin_block += "CASH FLOW\n"
+            for r in cfs:
+                fin_block += (
+                    f"  FY{r.fiscal_year}: OpCF={_b(r.operating_cash_flow)} | "
+                    f"CapEx={_b(r.capital_expenditure)} | FCF={_b(r.free_cash_flow)} | "
+                    f"D&A={_b(r.depreciation_and_amortization)} | "
+                    f"Buybacks={_b(r.common_stock_repurchased)}\n"
+                )
+
+    if ratios_by_year:
+        fin_block += "FINANCIAL RATIOS\n"
+        for r in ratios_by_year[:2]:
+            fin_block += (
+                f"  FY{r.fiscal_year}: GrMgn={_pct(r.gross_margin)} | OpMgn={_pct(r.operating_margin)} | "
+                f"NetMgn={_pct(r.net_margin)} | EBITDA Mgn={_pct(r.ebitda_margin)} | "
+                f"ROE={_pct(r.roe)} | ROA={_pct(r.roa)} | D/E={_f(r.debt_to_equity)} | "
+                f"FCF Mgn={_pct(r.fcf_margin)}\n"
             )
+
+    dcf_block = ""
+    if dcf and dcf.dcf_per_share is not None:
+        upside_str = f"{dcf.upside_pct*100:+.1f}%" if dcf.upside_pct is not None else "N/A"
+        dcf_block = (
+            f"DCF FAIR VALUE (WACC={_pct(dcf.wacc)}, Terminal Growth={_pct(dcf.terminal_growth)})\n"
+            f"  Fair Value: {_b(int(dcf.dcf_per_share))[1:] if dcf.dcf_per_share else 'N/A'}/share"
+            f" ({_f(dcf.dcf_per_share)}) | "
+            f"Current: {_f(dcf.current_price)} | Implied Upside: {upside_str}\n"
+            f"  EV(DCF)={_b(int(dcf.enterprise_value_dcf))} | "
+            f"Equity Value={_b(int(dcf.equity_value_dcf))}\n"
+        )
 
     prompt = (
         f"You are a senior equity analyst writing the opening section of an equity research report on {label}.\n\n"
-        f"Recent news headlines:\n{news_text}\n\n"
-        f"Recent financial highlights:\n{fin_summary or 'Not available.'}\n\n"
-        "Write two sections:\n\n"
+        f"RECENT NEWS HEADLINES:\n{news_text}\n\n"
+        + (f"FINANCIAL DATA (last 2 fiscal years):\n{fin_block}\n" if fin_block else "")
+        + (f"{dcf_block}\n" if dcf_block else "")
+        + "Write two sections:\n\n"
         "WHAT_HAPPENED:\n"
-        f"One concise paragraph (3-5 sentences) summarising the most significant recent developments for {label} "
-        "— earnings releases, strategic announcements, guidance updates, or macro events. Cite specific figures where available.\n\n"
+        f"One concise paragraph (3-5 sentences) based only on the news headlines above. "
+        f"Summarise the most significant recent developments for {label} — earnings, strategy, guidance, or macro events that directly affect the company. "
+        "Cite specific figures from the headlines where available.\n\n"
         "OUR_THOUGHTS:\n"
-        "Two to three short prose paragraphs sharing analytical perspective covering: "
-        "(1) what the recent news implies for the investment thesis, "
-        "(2) key financial trends (revenue trajectory, margin direction, cash generation), "
-        "(3) the main risk or opportunity to watch. Be specific and opinionated but balanced.\n\n"
-        'Format your response as JSON: {"what_happened": "...", "our_thoughts": "<p>...</p><p>...</p><p>...</p>"}'
+        "Exactly 2-3 short prose paragraphs of analytical perspective. "
+        "Draw from the financial data and DCF fair value above — but be selective: cite only the most impactful metrics, drop less important details to maintain concise paragraph length. "
+        "Cover: (1) what the financial trends and DCF valuation imply for the investment thesis, "
+        "(2) the most notable margin, return, or cash flow dynamic from the data, "
+        "(3) the key risk or catalyst to watch. Be opinionated but balanced.\n\n"
+        'Respond as JSON only: {"what_happened": "...", "our_thoughts": "<p>...</p><p>...</p>"}'
     )
 
     client = _get_client()
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1000,
+        max_tokens=1200,
         messages=[{"role": "user", "content": prompt}],
     )
     text_block = next(b for b in msg.content if b.type == "text")
